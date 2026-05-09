@@ -11,8 +11,7 @@
 	"customizations": {
 		"vscode": {
 			"settings": {
-				"C_Cpp.intelliSenseEngine": "disabled",
-				"cmake.exportCompileCommands": true,
+				"C_Cpp.intelliSenseEngine": "enabled",
 				"clangd.arguments": [
 					"--compile-commands-dir=${workspaceFolder}/build"
 				]
@@ -20,7 +19,21 @@
 			"extensions": [
 				"llvm-vs-code-extensions.vscode-clangd",
 				"vadimcn.vscode-lldb",
-				"ms-vscode.cmake-tools"
+				"ms-vscode.cmake-tools",
+				"ms-vscode.clang-format",
+				"xaver.clang-format",
+				"cheatsheet.cmake",
+				"cheatsheet.clang-format",
+				"cheatsheet.git",
+				"cheatsheet.gdb",
+				"cheatsheet.lldb",
+				"cheatsheet.make",
+				"cheatsheet.cmake",
+				"cheatsheet.clang-format",
+				"cheatsheet.git",
+				"cheatsheet.gdb",
+				"cheatsheet.lldb",
+				"cheatsheet.make"
 			]
 		}
 	}

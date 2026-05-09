@@ -28,32 +28,34 @@ include(StandardProjectSettings)
 include(CompilerWarnings)
 include(Sanitizers)
 
-# ─── Find Dependencies ───────────────────────────────────
+# ─── Configure Local Third-Party Paths ───────────────────
+set(THIRD_PARTY_INSTALL_DIR "${CMAKE_SOURCE_DIR}/third_party")
 
+# Add local prefix path so find_package uses local builds before system packages
+list(PREPEND CMAKE_PREFIX_PATH "${THIRD_PARTY_INSTALL_DIR}")
+
+# Prepend pkg-config path so pkg_check_modules finds our local .pc files first
+set(ENV{PKG_CONFIG_PATH} "${THIRD_PARTY_INSTALL_DIR}/lib/pkgconfig:${THIRD_PARTY_INSTALL_DIR}/share/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+
+# ─── Find Dependencies ───────────────────────────────────
 # SDL2 — windowing, input, OpenGL context (X11 + Wayland)
 find_package(SDL2 REQUIRED)
 
-# OpenGL — GPU rendering
-find_package(OpenGL REQUIRED)
+# OpenGL — GPU rendering (Headers provided by Glad)
+# find_package(OpenGL REQUIRED)
 
 # FreeType — font rasterization
 find_package(Freetype REQUIRED)
 
 # HarfBuzz — complex text shaping
-find_package(harfbuzz CONFIG QUIET)
-if(NOT harfbuzz_FOUND)
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(HARFBUZZ REQUIRED harfbuzz)
-    else()
-        message(FATAL_ERROR "HarfBuzz not found. Install via: vcpkg install harfbuzz")
-    endif()
-endif()
+# Use pkg-config explicitly because the generated CMake config is broken when built locally
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
 
 # libvterm — terminal escape sequence state machine
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
-    pkg_check_modules(VTERM QUIET vterm)
+    pkg_check_modules(VTERM QUIET IMPORTED_TARGET vterm)
 endif()
 # If not found via pkg-config, try manual detection
 if(NOT VTERM_FOUND)
@@ -156,11 +158,10 @@ if(VTERM_FOUND)
 
     target_include_directories(terminal_core
         PUBLIC ${SHELL_INCLUDE_DIR}
-        PRIVATE ${VTERM_INCLUDE_DIRS}
     )
 
     target_link_libraries(terminal_core
-        PRIVATE ${VTERM_LIBRARIES}
+        PRIVATE PkgConfig::VTERM
     )
 
     target_set_warnings(terminal_core)
@@ -185,26 +186,26 @@ add_library(renderer_core STATIC
 
     # --- CPU backend (SDL2 software fallback) ---
     src/renderer/SwRenderer.cpp
+
+    # --- OpenGL Loader (Glad) ---
+    third_party/src/glad/src/gl.c
 )
 
 target_include_directories(renderer_core
     PUBLIC ${SHELL_INCLUDE_DIR}
-    PRIVATE ${FREETYPE_INCLUDE_DIRS}
+    PRIVATE 
+        ${FREETYPE_INCLUDE_DIRS}
+        ${CMAKE_SOURCE_DIR}/third_party/include
 )
 
 target_link_libraries(renderer_core
     PRIVATE
-        OpenGL::GL
         Freetype::Freetype
+        ${CMAKE_DL_LIBS}
 )
 
-# Link HarfBuzz (handles both vcpkg and pkg-config paths)
-if(TARGET harfbuzz::harfbuzz)
-    target_link_libraries(renderer_core PRIVATE harfbuzz::harfbuzz)
-elseif(HARFBUZZ_LIBRARIES)
-    target_include_directories(renderer_core PRIVATE ${HARFBUZZ_INCLUDE_DIRS})
-    target_link_libraries(renderer_core PRIVATE ${HARFBUZZ_LIBRARIES})
-endif()
+# Link HarfBuzz (imported via pkg-config)
+target_link_libraries(renderer_core PRIVATE PkgConfig::HARFBUZZ)
 
 target_set_warnings(renderer_core)
 target_enable_sanitizers(renderer_core)
