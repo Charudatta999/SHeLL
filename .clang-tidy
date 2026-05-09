@@ -1,0 +1,47 @@
+---
+# =========================================================
+# .clang-tidy
+# =========================================================
+
+# List of enabled and disabled checks.
+# Starts by disabling all (-*) and then selectively enabling recommended groups.
+Checks: >
+    -*,
+    bugprone-*,
+    clang-analyzer-*,
+    cppcoreguidelines-*,
+    misc-*,
+    modernize-*,
+    performance-*,
+    portability-*,
+    readability-*,
+    -cppcoreguidelines-avoid-magic-numbers,
+    -readability-magic-numbers,
+    -modernize-use-trailing-return-type,
+    -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+    -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+    -readability-implicit-bool-conversion,
+    -readability-braces-around-statements
+
+WarningsAsErrors: ''
+
+# Analyze headers in the project. You may want to restrict this to only
+# your project's headers (e.g. '.*SHeLL.*') if third-party headers are noisy.
+HeaderFilterRegex: '.*'
+
+# Formatting is already handled by our .clang-format file
+FormatStyle: none
+
+# Example configurations for specific checks (e.g., naming conventions).
+# Adjust ClassCase/VariableCase values to match your preferred code style.
+CheckOptions:
+  - key:             readability-identifier-naming.ClassCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.StructCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.VariableCase
+    value:           camelBack
+  - key:             readability-identifier-naming.FunctionCase
+    value:           camelBack
+  - key:             modernize-use-nodiscard.ReplacementString
+    value:           '[[nodiscard]]'

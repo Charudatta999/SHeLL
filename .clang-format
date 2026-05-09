@@ -1,0 +1,70 @@
+# =========================================================
+# .clang-format
+# =========================================================
+
+---
+# --- Base Configuration ---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: Latest
+
+# --- Line Limits & Indentation ---
+ColumnLimit: 100
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+IndentCaseLabels: true
+NamespaceIndentation: All
+MaxEmptyLinesToKeep: 1
+
+# --- Alignment ---
+AlignAfterOpenBracket: Align
+AlignOperands: true
+AlignTrailingComments: true
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+
+# --- Braces & Formatting ---
+BreakBeforeBraces: Allman
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  BeforeCatch: true
+  BeforeElse: true
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+Cpp11BracedListStyle: true
+
+# --- Short Blocks & Packing ---
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BinPackArguments: false
+BinPackParameters: false
+
+# --- Classes & Constructors ---
+AccessModifierOffset: -4
+EmptyLineBeforeAccessModifier: LogicalBlock
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+BreakConstructorInitializersBeforeComma: true
+
+# --- Includes & Comments ---
+SortIncludes: true
+IncludeBlocks: Regroup
+FixNamespaceComments: true
+ReflowComments: true
+PenaltyBreakComment: 300
+PenaltyBreakString: 1000
+
+# --- Spaces & Parentheses ---
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SeparateDefinitionBlocks: Always
