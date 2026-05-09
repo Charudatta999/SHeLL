@@ -1,0 +1,6 @@
+{
+    "cmake.sourceDirectory": "D:/cjadhav/Work/apps/shell/SHeLL",
+    "dev.containers.dockerPath": "podman",
+    "docker.dockerPath": "podman",
+    "containers.containerCommand": "podman"
+}

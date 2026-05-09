@@ -1,0 +1,27 @@
+{
+	"name": "Fedora C++ DevContainer",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"runArgs": [
+		"--userns=keep-id"
+	],
+	"remoteUser": "vscode",
+	"updateRemoteUserUID": true,
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"C_Cpp.intelliSenseEngine": "disabled",
+				"cmake.exportCompileCommands": true,
+				"clangd.arguments": [
+					"--compile-commands-dir=${workspaceFolder}/build"
+				]
+			},
+			"extensions": [
+				"llvm-vs-code-extensions.vscode-clangd",
+				"vadimcn.vscode-lldb",
+				"ms-vscode.cmake-tools"
+			]
+		}
+	}
+}
