@@ -19,7 +19,7 @@ MaxEmptyLinesToKeep: 1
 
 # --- Alignment ---
 AlignAfterOpenBracket: Align
-AlignOperands: true
+AlignOperands: Align
 AlignTrailingComments: true
 PointerAlignment: Left
 ReferenceAlignment: Left
@@ -45,10 +45,10 @@ Cpp11BracedListStyle: true
 
 # --- Short Blocks & Packing ---
 AllowShortFunctionsOnASingleLine: Empty
-AllowShortIfStatementsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 BinPackArguments: false
-BinPackParameters: false
+BinPackParameters: OnePerLine
 
 # --- Classes & Constructors ---
 AccessModifierOffset: -4
@@ -57,10 +57,13 @@ ConstructorInitializerAllOnOneLineOrOnePerLine: false
 BreakConstructorInitializersBeforeComma: true
 
 # --- Includes & Comments ---
-SortIncludes: true
+SortIncludes:
+  Enabled: true
+  IgnoreCase: false
+  IgnoreExtension: false
 IncludeBlocks: Regroup
 FixNamespaceComments: true
-ReflowComments: true
+ReflowComments: Always
 PenaltyBreakComment: 300
 PenaltyBreakString: 1000
 
