@@ -188,12 +188,12 @@ add_library(renderer_core STATIC
     src/renderer/SwRenderer.cpp
 
     # --- OpenGL Loader (Glad) ---
-    third_party/src/glad/src/gl.c
+    third_party/src/glad/gl.c
 )
 
 target_include_directories(renderer_core
     PUBLIC ${SHELL_INCLUDE_DIR}
-    PRIVATE 
+    PRIVATE
         ${FREETYPE_INCLUDE_DIRS}
         ${CMAKE_SOURCE_DIR}/third_party/include
 )
@@ -296,7 +296,7 @@ option(BUILD_TESTING "Build unit and integration tests" OFF)
 
 if(BUILD_TESTING)
     enable_testing()
-    # add_subdirectory(tests)
+    add_subdirectory(tests)
 endif()
 
 # ═════════════════════════════════════════════════════════
