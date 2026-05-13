@@ -120,6 +120,7 @@ add_library(shell_core STATIC
 
     # --- I/O ---
     src/io/Fd.cpp
+    src/io/IOException.cpp
     src/io/Pipe.cpp
     src/io/FileDescriptor.cpp
     src/io/Cloexec.cpp
