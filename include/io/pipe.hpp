@@ -1,8 +1,8 @@
 #ifndef IO_PIPE_HPP
 #define IO_PIPE_HPP
 
-#include "io/CloExec.hpp"
 #include "io/FileDescriptor.hpp"
+
 namespace io
 {
 

@@ -1,3 +1,5 @@
+#ifndef IO_FILE_DESCRIPTOR_HPP
+#define IO_FILE_DESCRIPTOR_HPP
 namespace io
 {
 class FileDescriptor final
@@ -19,4 +21,5 @@ public:
     [[nodiscard]]
     int GetFD() const;
 };
-}
+} // namespace io
+#endif // IO_FILE_DESCRIPTOR_HPP
