@@ -1,13 +1,16 @@
 #ifndef IO_PIPE_HPP
 #define IO_PIPE_HPP
 
+#include "io/CloExec.hpp"
+#include "io/FileDescriptor.hpp"
 namespace io
 {
+
 class Pipe
 {
 private:
-    int m_readFD_;
-    int m_writeFD_;
+    FileDescriptor m_readFD_;
+    FileDescriptor m_writeFD_;
 
 public:
     // constructors and destructor
@@ -22,9 +25,9 @@ public:
 
     // member functions
     [[nodiscard("output should not be ignored")]]
-    int GetReadPipeFD() const noexcept;
+    const FileDescriptor& GetReadPipeFD() const noexcept;
     [[nodiscard("output should not be ignored")]]
-    int GetWritePipeFD() const noexcept;
+    const FileDescriptor& GetWritePipeFD() const noexcept;
 
     // close FD's
     void CloseReadFD() noexcept;

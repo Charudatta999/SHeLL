@@ -29,8 +29,8 @@ Pipe::Pipe()
     std::array<int, 2> fds{-1, -1};
     if (pipe2(fds.data(), O_CLOEXEC) == 0)
     {
-        m_readFD_ = fds[0];
-        m_writeFD_ = fds[1];
+        m_readFD_ = FileDescriptor(0);
+        m_writeFD_ = FileDescriptor(1);
     }
     else
     {
@@ -39,8 +39,8 @@ Pipe::Pipe()
 }
 
 Pipe::Pipe(Pipe&& other) noexcept
-    : m_readFD_(std::exchange(other.m_readFD_, -1))
-    , m_writeFD_(std::exchange(other.m_writeFD_, -1))
+    : m_readFD_(std::exchange(other.m_readFD_, FileDescriptor(-1)))
+    , m_writeFD_(std::exchange(other.m_writeFD_, FileDescriptor(-1)))
 {
 }
 
@@ -50,38 +50,36 @@ Pipe& Pipe::operator=(Pipe&& other) noexcept
     {
         CloseReadFD();
         CloseWriteFD();
-        this->m_readFD_ = std::exchange(other.m_readFD_, -1);
-        this->m_writeFD_ = std::exchange(other.m_writeFD_, -1);
+        this->m_readFD_ = std::exchange(other.m_readFD_, FileDescriptor(-1));
+        this->m_writeFD_ = std::exchange(other.m_writeFD_, FileDescriptor(-1));
     }
     return *this;
 }
 
 // member functions
-int Pipe::GetReadPipeFD() const noexcept
+const FileDescriptor& Pipe::GetReadPipeFD() const noexcept
 {
     return m_readFD_;
 }
 
-int Pipe::GetWritePipeFD() const noexcept
+const FileDescriptor& Pipe::GetWritePipeFD() const noexcept
 {
     return m_writeFD_;
 }
 
 void Pipe::CloseReadFD() noexcept
 {
-    if (m_readFD_ != -1)
+    if (m_readFD_.GetFD() != -1)
     {
-        close(m_readFD_);
-        m_readFD_ = -1;
+        m_readFD_.Close();
     }
 }
 
 void Pipe::CloseWriteFD() noexcept
 {
-    if (m_writeFD_ != -1)
+    if (m_writeFD_.GetFD() != -1)
     {
-        close(m_writeFD_);
-        m_writeFD_ = -1;
+        m_writeFD_.Close();
     }
 }
 
