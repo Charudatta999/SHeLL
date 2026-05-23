@@ -16,6 +16,7 @@ public:
     FileDescriptor& operator=(FileDescriptor&& other) noexcept;
 
     bool Close();
-    int GetFD();
+    [[nodiscard]]
+    int GetFD() const;
 };
 }
