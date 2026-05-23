@@ -5,18 +5,18 @@
 namespace io
 {
 
-FileDescriptor::FileDescriptor(int fd) : fd_(fd)
-{
+FileDescriptor::FileDescriptor(int fd) noexcept : fd_(fd)
+{ 
 }
 
-FileDescriptor::~FileDescriptor()
+FileDescriptor::~FileDescriptor() noexcept
 {
     Close();
 }
 
 bool FileDescriptor::Close()
 {
-    if (close(fd) == -1)
+    if (close(fd_) == -1)
     {
         return false;
     }
@@ -25,7 +25,7 @@ bool FileDescriptor::Close()
     return true;
 }
 
-int FileDescriptor::GetFd()
+int FileDescriptor::GetFD()
 {
     return fd_;
 }
