@@ -37,13 +37,13 @@ bool fdops::SetCloexec(FileDescriptor& fileDes) noexcept
     return fcntl(fileDes.GetFD(), F_SETFD, fdFlags) != -1;
 }
 
-bool fdops::Dup2(FileDescriptor& oldFd, FileDescriptor& newFd) noexcept
+bool fdops::Dup2(FileDescriptor& oldFd, int newFd) noexcept
 {
-    if(oldFd.GetFD() == -1 && newFd.GetFD() == -1)
+    if(oldFd.GetFD() == -1 && newFd == -1)
     {
         return false;
     }
-    return dup2(oldFd.GetFD(), newFd.GetFD()) != -1;
+    return dup2(oldFd.GetFD(), newFd) != -1;
 }
 
 std::unique_ptr<FileDescriptor> fdops::Dup(FileDescriptor& oldFd) noexcept

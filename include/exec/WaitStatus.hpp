@@ -30,7 +30,7 @@ public:
     bool Signaled() const;
 
     [[nodiscard]]
-    int Signal() const;
+    int GetSignal() const;
 
     [[nodiscard]]
     bool IsValid() const;

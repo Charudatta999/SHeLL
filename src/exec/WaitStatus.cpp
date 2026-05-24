@@ -43,7 +43,7 @@ bool WaitStatus::Signaled() const
     return m_status_ != -1 && WIFSIGNALED(m_status_);
 }
 
-int WaitStatus::Signal() const
+int WaitStatus::GetSignal() const
 {
 
     if (Signaled())

@@ -14,7 +14,7 @@ bool IsCloexecSet(FileDescriptor& fileDes) noexcept;
 bool SetCloexec(FileDescriptor& fileDes) noexcept;
 
 std::unique_ptr<FileDescriptor> Dup(FileDescriptor& oldFd) noexcept;
-bool Dup2(FileDescriptor& oldFd, FileDescriptor& newFd) noexcept;
+bool Dup2(FileDescriptor& oldFd, int newFd) noexcept;
 } // namespace fdops
 } // namespace io
 

@@ -3,14 +3,15 @@
 
 #include "io/FileDescriptor.hpp"
 
+#include <memory>
 namespace io
 {
 
 class Pipe
 {
 private:
-    FileDescriptor m_readFD_;
-    FileDescriptor m_writeFD_;
+    std::unique_ptr<FileDescriptor> m_readFD_;
+    std::unique_ptr<FileDescriptor> m_writeFD_;
 
 public:
     // constructors and destructor
@@ -25,9 +26,9 @@ public:
 
     // member functions
     [[nodiscard("output should not be ignored")]]
-    const FileDescriptor& GetReadPipeFD() const noexcept;
+    const std::unique_ptr<FileDescriptor>& GetReadPipeFD() const noexcept;
     [[nodiscard("output should not be ignored")]]
-    const FileDescriptor& GetWritePipeFD() const noexcept;
+    const std::unique_ptr<FileDescriptor>& GetWritePipeFD() const noexcept;
 
     // close FD's
     void CloseReadFD() noexcept;

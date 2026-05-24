@@ -5,13 +5,11 @@ namespace io
 class FileDescriptor final
 {
 private:
-    int fd_;
-
+    int m_fd_;
+public:
     FileDescriptor(const FileDescriptor& other) = delete;
     FileDescriptor& operator=(const FileDescriptor& other) = delete;
-
-public:
-    explicit FileDescriptor(int fd) noexcept;
+    explicit FileDescriptor(int fileDescriptor) noexcept;
     ~FileDescriptor() noexcept;
 
     FileDescriptor(FileDescriptor&& other) noexcept;

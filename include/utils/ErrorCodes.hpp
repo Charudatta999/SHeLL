@@ -1,0 +1,6 @@
+#ifndef UTIL_ERR_CODE_HPP
+#define UTIL_ERR_CODE_HPP
+
+const int FAILED_TO_CREATE = 1001;
+const int INVALID_STATUS = 1002;
+#endif // UTIL_ERR_CODE_HPP
