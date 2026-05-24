@@ -15,6 +15,9 @@ Checks: >
     performance-*,
     portability-*,
     readability-*,
+    misc-move-const-arg,
+    performance-move-const-arg,
+    cppcoreguidelines-special-member-functions,
     -cppcoreguidelines-avoid-magic-numbers,
     -readability-magic-numbers,
     -modernize-use-trailing-return-type,
@@ -23,7 +26,7 @@ Checks: >
     -readability-implicit-bool-conversion,
     -readability-braces-around-statements
 
-WarningsAsErrors: ''
+WarningsAsErrors: '*'
 
 # Analyze headers in the project. You may want to restrict this to only
 # your project's headers (e.g. '.*SHeLL.*') if third-party headers are noisy.

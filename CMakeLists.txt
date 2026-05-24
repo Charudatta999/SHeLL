@@ -119,11 +119,10 @@ add_library(shell_core STATIC
     src/signals/Sigchld.cpp
 
     # --- I/O ---
-    src/io/Fd.cpp
+    src/io/FDOps.cpp
     src/io/IOException.cpp
     src/io/Pipe.cpp
     src/io/FileDescriptor.cpp
-    src/io/Cloexec.cpp
 
     # --- Utils ---
     src/utils/Error.cpp

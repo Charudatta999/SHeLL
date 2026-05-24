@@ -17,8 +17,8 @@ public:
     // Non-Copyable and Non-Moveable
     Process(const Process& process) = delete;
     Process operator=(const Process& process) = delete;
-    Process(const Process&& process) = delete;
-    Process operator=(const Process&& process) = delete;
+    Process(Process&& process) = delete;
+    Process& operator=(Process&& process) = delete;
 
     bool Start(const std::string& command, const std::vector<std::string>& args);
 
