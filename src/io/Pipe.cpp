@@ -25,24 +25,28 @@ namespace io
 // leaks. When linking processes (e.g. `ls | grep`), dup2() maps the pipe to stdin/stdout
 // in the child prior to exec(), which safely strips O_CLOEXEC from the duplicated FD.
 Pipe::Pipe()
-    : m_readFD_(std::make_unique<FileDescriptor>(-1))
-    , m_writeFD_(std::make_unique<FileDescriptor>(-1))
 {
     std::array<int, 2> fds{-1, -1};
-    if (pipe2(fds.data(), O_CLOEXEC) == 0)
+    if (pipe2(fds.data(), O_CLOEXEC) != 0)
+        throw IOException("Pipe creation failed", errno);
+
+    m_readFD_ = std::make_unique<FileDescriptor>(fds[0]);
+    try
     {
-        m_readFD_ = std::make_unique<FileDescriptor>(fds[0]);
         m_writeFD_ = std::make_unique<FileDescriptor>(fds[1]);
     }
-    else
+    catch (...)
     {
-        throw IOException("Pipe creation failed", errno);
+        ::close(fds[1]); // prevent fd leak if second allocation fails
+        throw;
     }
 }
 
 Pipe::Pipe(Pipe&& other) noexcept
-    : m_readFD_(std::exchange(other.m_readFD_, std::make_unique<FileDescriptor>(-1)))
-    , m_writeFD_(std::exchange(other.m_writeFD_, std::make_unique<FileDescriptor>((-1))))
+    : m_readFD_(std::exchange(other.m_readFD_,
+                              std::unique_ptr<FileDescriptor>(new (std::nothrow) FileDescriptor(-1))))
+    , m_writeFD_(std::exchange(other.m_writeFD_,
+                               std::unique_ptr<FileDescriptor>(new (std::nothrow) FileDescriptor(-1))))
 {
 }
 
@@ -52,8 +56,10 @@ Pipe& Pipe::operator=(Pipe&& other) noexcept
     {
         CloseReadFD();
         CloseWriteFD();
-        this->m_readFD_ = std::exchange(other.m_readFD_, std::make_unique<FileDescriptor>((-1)));
-        this->m_writeFD_ = std::exchange(other.m_writeFD_, std::make_unique<FileDescriptor>((-1)));
+        m_readFD_  = std::exchange(other.m_readFD_,
+                                   std::unique_ptr<FileDescriptor>(new (std::nothrow) FileDescriptor(-1)));
+        m_writeFD_ = std::exchange(other.m_writeFD_,
+                                   std::unique_ptr<FileDescriptor>(new (std::nothrow) FileDescriptor(-1)));
     }
     return *this;
 }
@@ -71,18 +77,14 @@ const std::unique_ptr<FileDescriptor>& Pipe::GetWritePipeFD() const noexcept
 
 void Pipe::CloseReadFD() noexcept
 {
-    if (m_readFD_->GetFD() != -1)
-    {
+    if (m_readFD_ && m_readFD_->GetFD() != -1)
         m_readFD_->Close();
-    }
 }
 
 void Pipe::CloseWriteFD() noexcept
 {
-    if (m_writeFD_->GetFD() != -1)
-    {
+    if (m_writeFD_ && m_writeFD_->GetFD() != -1)
         m_writeFD_->Close();
-    }
 }
 
 Pipe::~Pipe()

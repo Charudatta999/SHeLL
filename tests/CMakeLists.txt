@@ -8,7 +8,8 @@ include(GoogleTest)
 # Define the unit testing executable
 add_executable(shell_tests
     unit/io/PipeTest.cpp
-    # Add other test files here in the future
+    unit/parser/TokenTest.cpp
+    unit/parser/ParserTest.cpp
 )
 
 # Include the main project headers

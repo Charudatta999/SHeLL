@@ -95,11 +95,13 @@ add_library(shell_core STATIC
     src/shell/Prompt.cpp
 
     # --- Parser ---
+    src/parser/Token.cpp
     src/parser/Tokenizer.cpp
     src/parser/Parser.cpp
     src/parser/Command.cpp
 
     # --- Executor ---
+    src/exec/ExecException.cpp
     src/exec/Executor.cpp
     src/exec/Process.cpp
     src/exec/Pipeline.cpp
@@ -119,7 +121,7 @@ add_library(shell_core STATIC
     src/signals/Sigchld.cpp
 
     # --- I/O ---
-    src/io/FDOps.cpp
+    src/io/FdOps.cpp
     src/io/IOException.cpp
     src/io/Pipe.cpp
     src/io/FileDescriptor.cpp
