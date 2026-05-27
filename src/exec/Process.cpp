@@ -32,11 +32,11 @@ bool Process::Start(const std::vector<std::string>& command,
     if (m_pid_ == 0)
     {
 
-        if(!readFD)
+        if(readFD != nullptr)
         {
             io::fdops::Dup2(*readFD, stdinFD);
         }
-        if(!writeFD)
+        if(writeFD != nullptr)
         {
             io::fdops::Dup2(*writeFD,stdOutFD);
         }

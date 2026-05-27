@@ -5,9 +5,12 @@
 # Uses SDL2 + OpenGL 3.3 + FreeType + HarfBuzz + libvterm.
 # Target: 10-16 MB RAM, runs on X11 and Wayland.
 #
-# Build:
-#   cmake -B build -DCMAKE_BUILD_TYPE=Debug
-#   cmake --build build
+# Build (clean first via preset):
+#   cmake --preset debug          # configure
+#   cmake --build --preset debug  # clean + build
+#
+# Legacy (no auto-clean):
+#   cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build
 #
 # Run:
 #   ./build/bin/shell

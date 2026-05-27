@@ -1,0 +1,3 @@
+[submodule "third_party/logger"]
+	path = third_party/logger
+	url = https://github.com/Charudatta999/Logger.git

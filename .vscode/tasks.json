@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Configure: Debug",
+      "type": "shell",
+      "command": "cmake --preset debug",
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Configure CMake with Debug preset"
+    },
+    {
+      "label": "Build: Debug (clean first)",
+      "type": "shell",
+      "command": "cmake --build --preset debug",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"],
+      "detail": "Clean then build Debug target"
+    },
+    {
+      "label": "Build: Release (clean first)",
+      "type": "shell",
+      "command": "cmake --build --preset release",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "detail": "Clean then build Release target"
+    },
+    {
+      "label": "Build: Tests (clean first)",
+      "type": "shell",
+      "command": "cmake --preset test && cmake --build --preset test",
+      "group": "test",
+      "problemMatcher": ["$gcc"],
+      "detail": "Configure + clean build with tests enabled"
+    },
+    {
+      "label": "Run Tests",
+      "type": "shell",
+      "command": "ctest --preset test",
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Run all tests via CTest"
+    }
+  ]
+}

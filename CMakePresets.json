@@ -1,0 +1,69 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 22, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "description": "Debug build with sanitizers",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "OFF",
+        "BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Optimised release build",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "test",
+      "displayName": "Test",
+      "description": "Debug build with tests enabled",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    {
+      "name": "debug",
+      "displayName": "Build Debug (clean first)",
+      "configurePreset": "debug",
+      "cleanFirst": true
+    },
+    {
+      "name": "release",
+      "displayName": "Build Release (clean first)",
+      "configurePreset": "release",
+      "cleanFirst": true
+    },
+    {
+      "name": "test",
+      "displayName": "Build Tests (clean first)",
+      "configurePreset": "test",
+      "cleanFirst": true
+    }
+  ],
+
+  "testPresets": [
+    {
+      "name": "test",
+      "displayName": "Run Tests",
+      "configurePreset": "test",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
