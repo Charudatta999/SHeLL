@@ -69,4 +69,11 @@ Testing/
 .cache/
 
 #thirdparty
-third_party/**
+third_party/rapidjson/**
+third_party/rapidjson/**
+third_party/include/**
+third_party/lib/**
+third_party/lib64/**
+third_party/src/**
+third_party/share/**
+third_party/bin/**
