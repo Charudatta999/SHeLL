@@ -23,7 +23,6 @@ public:
     ShellState(ShellState&& shellState) = delete;
     ShellState& operator=(ShellState&& shellState) = delete;
 
-
     [[nodiscard]]
     std::string GetCWD() const;
 
@@ -54,7 +53,7 @@ public:
     [[nodiscard]]
     std::map<std::string, std::string> GetEnv() const;
 
-    //exit code releated
+    // exit code releated
     [[nodiscard]]
     int GetLastCommandExitCode() const;
 
@@ -88,7 +87,7 @@ public:
     void RequestExit(int exitCode) noexcept;
 
 private:
-    std::string  m_cwd_;
+    std::string m_cwd_;
     std::map<std::string, std::string> m_localVars_;
     std::map<std::string, std::string> m_globalVars_;
     std::map<std::string, bool> m_exportedVars_;
@@ -97,7 +96,7 @@ private:
     std::map<std::string, bool> m_shellOptions_;
     pid_t m_shellPid_;
     int m_shellExitCode_;
-    std::map<std::string,parser::FunctionNode> m_functions_;
+    std::map<std::string, parser::FunctionNode> m_functions_;
 };
 } // namespace shell
 #endif // SHELL_SHELL_STATE_HPP
