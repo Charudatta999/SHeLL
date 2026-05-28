@@ -11,7 +11,6 @@ namespace parser
 
 // ─── Forward declarations ─────────────────────────────────────────────────────
 struct AstNode;
-using AstNodePtr = std::unique_ptr<AstNode>;
 
 // ─── Base AST node ────────────────────────────────────────────────────────────
 struct AstNode
@@ -60,7 +59,7 @@ struct SimpleCommand : AstNode
 // cmd1 | cmd2 | cmd3    or    ! cmd1 | cmd2
 struct PipelineNode : AstNode
 {
-    std::vector<AstNodePtr> stages;
+    std::vector<std::unique_ptr<AstNode>> stages;
     bool                    bang = false; // ! prefix — negate exit status
 };
 
@@ -69,9 +68,9 @@ struct PipelineNode : AstNode
 struct AndOrNode : AstNode
 {
     enum class Op { And, Or };
-    AstNodePtr lhs;
+    std::unique_ptr<AstNode> lhs;
     Op         op;
-    AstNodePtr rhs;
+    std::unique_ptr<AstNode> rhs;
 };
 
 // ─── Statement list ───────────────────────────────────────────────────────────
@@ -80,7 +79,7 @@ struct ListNode : AstNode
 {
     struct Item
     {
-        AstNodePtr node;
+        std::unique_ptr<AstNode> node;
         bool       background; // true if followed by &
     };
     std::vector<Item> items;
@@ -90,14 +89,14 @@ struct ListNode : AstNode
 // ( list )
 struct SubshellNode : AstNode
 {
-    AstNodePtr body;
+    std::unique_ptr<AstNode> body;
 };
 
 // ─── Group command ────────────────────────────────────────────────────────────
 // { list ; }
 struct GroupNode : AstNode
 {
-    AstNodePtr body;
+    std::unique_ptr<AstNode> body;
 };
 
 // ─── If statement ─────────────────────────────────────────────────────────────
@@ -106,19 +105,19 @@ struct IfNode : AstNode
 {
     struct Branch
     {
-        AstNodePtr condition;
-        AstNodePtr body;
+        std::unique_ptr<AstNode> condition;
+        std::unique_ptr<AstNode> body;
     };
     std::vector<Branch> branches;   // index 0 = if, 1..N = elif
-    AstNodePtr          else_body;  // null if no else
+    std::unique_ptr<AstNode>          else_body;  // null if no else
 };
 
 // ─── While / Until ────────────────────────────────────────────────────────────
 struct WhileNode : AstNode
 {
     bool       until = false;
-    AstNodePtr condition;
-    AstNodePtr body;
+    std::unique_ptr<AstNode> condition;
+    std::unique_ptr<AstNode> body;
 };
 
 // ─── For loop ─────────────────────────────────────────────────────────────────
@@ -127,7 +126,7 @@ struct ForNode : AstNode
 {
     std::string              var;
     std::vector<std::string> words;  // empty = iterate over "$@"
-    AstNodePtr               body;
+    std::unique_ptr<AstNode>               body;
 };
 
 // ─── Case statement ───────────────────────────────────────────────────────────
@@ -136,7 +135,7 @@ struct CaseNode : AstNode
     struct Arm
     {
         std::vector<std::string> patterns;
-        AstNodePtr               body;
+        std::unique_ptr<AstNode>               body;
     };
     std::string      word;
     std::vector<Arm> arms;
@@ -147,7 +146,7 @@ struct CaseNode : AstNode
 struct FunctionNode : AstNode
 {
     std::string name;
-    AstNodePtr  body;  // always a compound command
+    std::unique_ptr<AstNode>  body;  // always a compound command
 };
 
 } // namespace parser

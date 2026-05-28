@@ -3,4 +3,5 @@
 
 const int FAILED_TO_CREATE = 1001;
 const int INVALID_STATUS = 1002;
+const int VALUE_NOT_FOUND = 1003;
 #endif // UTIL_ERR_CODE_HPP

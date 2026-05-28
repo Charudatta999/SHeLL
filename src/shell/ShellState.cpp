@@ -1,14 +1,19 @@
 #include "shell/ShellState.hpp"
 
+#include "shell/ShellException.hpp"
+#include "utils/ErrorCodes.hpp"
+
+#include <filesystem>
+#include <memory>
+#include <new>
 #include <unistd.h>
 
 namespace shell
 {
 
-ShellState::ShellState()
-    : m_cwd_{}
-    , m_localVars_{}
-    , m_globalVars_{}
+ShellState::ShellState(const std::map<std::string, std::string>& globalVars)
+    : m_cwd_{std::filesystem::current_path().string()}
+    , m_vars_{globalVars}
     , m_exportedVars_{}
     , m_lastExitCode_{0}
     , m_runningFlag_{true}
@@ -16,127 +21,183 @@ ShellState::ShellState()
     , m_shellPid_{getpid()}
     , m_shellExitCode_{0}
     , m_functions_{}
-{}
+{
+}
 
 ShellState::~ShellState() = default;
 
 // ── CWD ──────────────────────────────────────────────────────────────────────
 
-std::string ShellState::GetCWD() const
+const std::string& ShellState::GetCWD() const
 {
-    return {};
+    return m_cwd_;
 }
 
 void ShellState::SetCWD(const std::string& currentDir)
 {
+    m_cwd_ = currentDir;
 }
 
 // ── PID ──────────────────────────────────────────────────────────────────────
 
 pid_t ShellState::GetPid() const
 {
-    return 0;
+    return m_shellPid_;
 }
 
 // ── Variables ────────────────────────────────────────────────────────────────
 
 std::optional<std::string> ShellState::GetVar(const std::string& varName) const
 {
+    auto itr = m_vars_.find(varName);
+    if (itr != m_vars_.end())
+    {
+        return itr->second;
+    }
     return std::nullopt;
 }
 
-std::vector<std::tuple<std::string, std::string>> ShellState::GetLocalVars() const
+std::map<std::string, std::string> ShellState::GetLocalVars() const
 {
-    return {};
+    std::map<std::string, std::string> localVars;
+    for (const auto& itr : m_vars_)
+    {
+        if (!m_exportedVars_.count(itr.first))
+        {
+            localVars.emplace(itr);
+        }
+    }
+    return localVars;
 }
 
-std::vector<std::tuple<std::string, std::string>> ShellState::GetGlobalVars() const
+void ShellState::SetVar(const std::string& name, const std::string& value) noexcept
 {
-    return {};
+    try
+    {
+        m_vars_[name] = value;
+    }
+    catch(const std::bad_alloc&)
+    {
+        // todo log when logger is intergrated
+    }
+
 }
 
-void ShellState::SetVar(const std::string& name, std::string value, bool isGlobal) noexcept
+void ShellState::UnSetVar(const std::string& varName) noexcept
 {
-}
 
-void ShellState::UnSetVar(const std::string& varName, bool isGlobal) noexcept
-{
+    m_exportedVars_.erase(varName);
+    m_vars_.erase(varName);
 }
 
 bool ShellState::IsExported(const std::string& varName) const
 {
-    return false;
+    return m_exportedVars_.count(varName);
 }
 
 void ShellState::ExportVar(const std::string& varName) noexcept
 {
+    try
+    {
+        m_exportedVars_.insert(varName);
+    }
+    catch(const std::bad_alloc&)
+    {
+        // todo log when logger is intergrated
+    }
 }
 
 std::map<std::string, std::string> ShellState::GetEnv() const
 {
-    return {};
+    std::map<std::string, std::string> envVars;
+    for (const auto& itr : m_vars_)
+    {
+        if (m_exportedVars_.count(itr.first))
+        {
+            envVars.emplace(itr);
+        }
+    }
+    return envVars;
 }
 
 // ── Exit codes ───────────────────────────────────────────────────────────────
 
 int ShellState::GetLastCommandExitCode() const
 {
-    return 0;
+    return m_lastExitCode_;
 }
 
 int ShellState::GetShellExitCode() const
 {
-    return 0;
+    return m_shellExitCode_;
 }
 
 void ShellState::SetLastExitCode(int code) noexcept
 {
+    m_lastExitCode_ = code;
 }
 
 // ── Functions ────────────────────────────────────────────────────────────────
 
 void ShellState::AddFunction(parser::FunctionNode function)
 {
+    m_functions_.emplace(function.name, std::move(function));
 }
 
-const parser::AstNode* ShellState::GetFunctionBody(const std::string& functionName) const
+const std::unique_ptr<parser::AstNode>&
+ShellState::GetFunctionBody(const std::string& functionName) const
 {
-    return nullptr;
+    try
+    {
+
+        const auto& funcBody = m_functions_.at(functionName);
+        return funcBody.body;
+    }
+    catch (const std::out_of_range&)
+    {
+        throw ShellException("function not found", VALUE_NOT_FOUND);
+    }
 }
 
 bool ShellState::IsFunctionPresent(const std::string& functionName) const
 {
-    return false;
+    return m_functions_.count(functionName);
 }
 
 void ShellState::UnsetFunction(const std::string& functionName)
 {
+    m_functions_.erase(functionName);
 }
 
 // ── Shell options ─────────────────────────────────────────────────────────────
 
 void ShellState::SetOption(const std::string& option)
 {
+    m_shellOptions_[option] = true;
 }
 
 void ShellState::DisableOption(const std::string& option)
 {
+    m_shellOptions_[option] = false;
 }
 
 bool ShellState::IsOptionEnabled(const std::string& option) const
 {
-    return false;
+    auto itr = m_shellOptions_.find(option);
+    return itr != m_shellOptions_.end() && itr->second;
 }
 
 // ── Running state ─────────────────────────────────────────────────────────────
 
 bool ShellState::IsRunning() const
 {
-    return false;
+    return m_runningFlag_;
 }
 
 void ShellState::RequestExit(int exitCode) noexcept
 {
+    m_runningFlag_ = false;
+    m_shellExitCode_ = exitCode;
 }
 
 } // namespace shell

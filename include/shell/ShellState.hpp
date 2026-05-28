@@ -5,10 +5,9 @@
 
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <sys/types.h>
-#include <tuple>
-#include <vector>
 
 namespace shell
 {
@@ -16,7 +15,7 @@ class ShellState
 {
 
 public:
-    ShellState();
+    ShellState(const std::map<std::string, std::string>& globalVars);
     ~ShellState();
     ShellState(const ShellState&) = delete;
     ShellState& operator=(const ShellState& shellState) = delete;
@@ -24,7 +23,7 @@ public:
     ShellState& operator=(ShellState&& shellState) = delete;
 
     [[nodiscard]]
-    std::string GetCWD() const;
+    const std::string& GetCWD() const;
 
     [[nodiscard]]
     pid_t GetPid() const;
@@ -36,14 +35,11 @@ public:
     std::optional<std::string> GetVar(const std::string& varName) const;
 
     [[nodiscard]]
-    std::vector<std::tuple<std::string, std::string>> GetLocalVars() const;
+    std::map<std::string, std::string> GetLocalVars() const;
 
-    [[nodiscard]]
-    std::vector<std::tuple<std::string, std::string>> GetGlobalVars() const;
+    void SetVar(const std::string& name, const std::string& value = "") noexcept;
 
-    void SetVar(const std::string& name, std::string value, bool isGlobal) noexcept;
-
-    void UnSetVar(const std::string& varName, bool isGlobal) noexcept;
+    void UnSetVar(const std::string& varName) noexcept;
 
     [[nodiscard]]
     bool IsExported(const std::string& varName) const;
@@ -66,7 +62,7 @@ public:
     void AddFunction(parser::FunctionNode function);
 
     [[nodiscard]]
-    const parser::AstNode* GetFunctionBody(const std::string& functionName) const;
+    const std::unique_ptr<parser::AstNode>& GetFunctionBody(const std::string& functionName) const;
 
     [[nodiscard]]
     bool IsFunctionPresent(const std::string& functionName) const;
@@ -88,9 +84,8 @@ public:
 
 private:
     std::string m_cwd_;
-    std::map<std::string, std::string> m_localVars_;
-    std::map<std::string, std::string> m_globalVars_;
-    std::map<std::string, bool> m_exportedVars_;
+    std::map<std::string, std::string> m_vars_;
+    std::set<std::string> m_exportedVars_;
     int m_lastExitCode_;
     bool m_runningFlag_;
     std::map<std::string, bool> m_shellOptions_;
