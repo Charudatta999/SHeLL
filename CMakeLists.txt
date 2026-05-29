@@ -221,7 +221,7 @@ target_enable_sanitizers(renderer_core)
 # SDL2 window + event loop → wires everything together.
 
 add_executable(shell
-    src/main.cpp
+    src/Main.cpp
     src/app/Window.cpp
     src/app/EventLoop.cpp
     src/app/Config.cpp
