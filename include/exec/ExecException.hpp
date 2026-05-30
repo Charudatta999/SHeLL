@@ -1,5 +1,5 @@
-#ifndef IO_EXEC_EXCEPTION_HPP
-#define IO_EXEC_EXCEPTION_HPP
+#ifndef EXEC_EXEC_EXCEPTION_HPP
+#define EXEC_EXEC_EXCEPTION_HPP
 
 #include <exception>
 #include <string>
@@ -25,4 +25,4 @@ public:
 
 } // namespace exec
 
-#endif // IO_EXEC_EXCEPTION_HPP
+#endif // EXEC_EXEC_EXCEPTION_HPP
