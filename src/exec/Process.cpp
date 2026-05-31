@@ -1,14 +1,19 @@
 #include "exec/Process.hpp"
+#include "exec/ExecHelpers.hpp"
+
 #include "io/FdOps.hpp"
 #include "io/FileDescriptor.hpp"
+
 #include <cstdio>
 #include <string>
 #include <unistd.h>
+
 namespace
 {
- const int stdinFD = 0;
- const int stdOutFD = 1;
-}
+const int stdinFD = 0;
+const int stdOutFD = 1;
+} // namespace
+
 namespace exec
 {
 Process::Process()
@@ -19,9 +24,10 @@ pid_t Process::GetPid() const
     return m_pid_;
 }
 
-bool Process::Start(const std::vector<std::string>& command,
-                const std::unique_ptr<io::FileDescriptor>& readFD,
-                const std::unique_ptr<io::FileDescriptor>& writeFD)
+bool Process::Start(const CommandSpec& spec,
+                    const std::unique_ptr<io::FileDescriptor>& readFD,
+                    const std::unique_ptr<io::FileDescriptor>& writeFD,
+                    pid_t pgid)
 {
     m_pid_ = fork();
     if (m_pid_ < 0)
@@ -32,25 +38,35 @@ bool Process::Start(const std::vector<std::string>& command,
     if (m_pid_ == 0)
     {
 
-        if(readFD != nullptr)
+        if (pgid == 0)
+        {
+            setpgid(0, 0);
+        }
+        else
+        {
+            setpgid(0, pgid);
+        }
+
+        if (readFD != nullptr)
         {
             io::fdops::Dup2(*readFD, stdinFD);
         }
-        if(writeFD != nullptr)
+        if (writeFD != nullptr)
         {
-            io::fdops::Dup2(*writeFD,stdOutFD);
+            io::fdops::Dup2(*writeFD, stdOutFD);
         }
         std::vector<char*> argv;
-        argv.reserve(command.size() + 1);
-        argv.push_back(const_cast<char*>(command[0].c_str()));
-        for (size_t i = 1; i < command.size(); i++)
+
+        argv.reserve(spec.argv.size() + 1);
+        argv.push_back(const_cast<char*>(spec.argv[0].c_str()));
+        for (size_t i = 1; i < spec.argv.size(); i++)
         {
-            argv.push_back(const_cast<char*>(command[i].c_str()));
+            argv.push_back(const_cast<char*>(spec.argv[i].c_str()));
         }
         argv.push_back(nullptr);
 
-        int retval = execvp(command[0].c_str(), argv.data());
-        if( retval == -1)
+        int retval = execvp(spec.argv[0].c_str(), argv.data());
+        if (retval == -1)
         {
             _exit(EXIT_FAILURE);
         }

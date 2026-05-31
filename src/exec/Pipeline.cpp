@@ -1,6 +1,6 @@
 #include "exec/Pipeline.hpp"
-
 #include "exec/ExecException.hpp"
+#include "exec/ExecHelpers.hpp"
 #include "exec/Process.hpp"
 #include "exec/WaitStatus.hpp"
 #include "io/FdOps.hpp"
@@ -36,7 +36,7 @@ std::unique_ptr<io::Pipe> Pipeline::CreatePipe()
     }
 }
 
-int Pipeline::Run(const std::vector<std::vector<std::string>>& pipeline, bool pipefail)
+int Pipeline::Run(const std::vector<const CommandSpec&> pipeline, bool pipefail)
 {
     std::vector<std::unique_ptr<io::Pipe>> pipeVector;
     const size_t pipeSize = pipeline.size();
