@@ -1,0 +1,16 @@
+#ifndef PARSER_AST_AST_HPP
+#define PARSER_AST_AST_HPP
+#include "parser/ast/AstNode.hpp"
+#include "parser/ast/AstVisitor.hpp"
+#include "parser/ast/commands/Pipeline.hpp"
+#include "parser/ast/commands/AndOr.hpp"
+#include "parser/ast/commands/Case.hpp"
+#include "parser/ast/commands/For.hpp"
+#include "parser/ast/commands/Function.hpp"
+#include "parser/ast/commands/Group.hpp"
+#include "parser/ast/commands/If.hpp"
+#include "parser/ast/commands/List.hpp"
+#include "parser/ast/commands/SimpleCommand.hpp"
+#include "parser/ast/commands/Subshell.hpp"
+#include "parser/ast/commands/While.hpp"
+#endif

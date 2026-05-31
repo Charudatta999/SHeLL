@@ -60,7 +60,7 @@ struct SimpleCommand : AstNode
 struct PipelineNode : AstNode
 {
     std::vector<std::unique_ptr<AstNode>> stages;
-    bool                    bang = false; // ! prefix — negate exit status
+    bool bang = false;
 };
 
 // ─── Logical list ─────────────────────────────────────────────────────────────
