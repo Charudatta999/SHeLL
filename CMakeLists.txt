@@ -101,7 +101,11 @@ add_library(shell_core STATIC
     src/parser/Token.cpp
     src/parser/Tokenizer.cpp
     src/parser/Parser.cpp
-    src/parser/Command.cpp
+    src/parser/ParserException.cpp
+
+    # --- Parser AST ---
+    src/parser/ast/Ast.cpp
+    src/parser/ast/AstPrinter.cpp
 
     # --- Executor ---
     src/exec/ExecException.cpp
@@ -243,6 +247,20 @@ endif()
 
 target_set_warnings(shell)
 target_enable_sanitizers(shell)
+
+# ═════════════════════════════════════════════════════════
+# Parser REPL (parser_repl) — manual parser test harness
+# ═════════════════════════════════════════════════════════
+# Tokenize -> parse -> print AST. No UI / SDL deps.
+
+add_executable(parser_repl
+    tools/parser_repl.cpp
+)
+
+target_include_directories(parser_repl PRIVATE ${SHELL_INCLUDE_DIR})
+target_link_libraries(parser_repl PRIVATE shell_core)
+target_set_warnings(parser_repl)
+target_enable_sanitizers(parser_repl)
 
 # ═════════════════════════════════════════════════════════
 # MCP Module (mcp_core) — opt-in

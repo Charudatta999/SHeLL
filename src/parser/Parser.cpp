@@ -1,79 +1,316 @@
 #include "parser/Parser.hpp"
 
-#include <cassert>
+#include "parser/Command.hpp"
+#include "parser/ParserException.hpp"
+#include "parser/Token.hpp"
+#include "parser/ast/Ast.hpp"
+#include "parser/ast/AstNode.hpp"
+#include "parser/ast/Redirect.hpp"
+#include "parser/ast/commands/AndOr.hpp"
+#include "parser/ast/commands/Group.hpp"
+#include "parser/ast/commands/SimpleCommand.hpp"
+#include "parser/ast/commands/Subshell.hpp"
+#include "parser/ast/commands/While.hpp"
+
+#include <cctype>
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace
+{
+const char assignMentOp = '=';
+
+std::pair<std::string, std::string> SplitOnce(const std::string& str,
+                                              char delimiter)
+{
+    const auto pos = str.find(delimiter);
+    if (pos == std::string_view::npos)
+        return {str, ""};
+    return {str.substr(0, pos), str.substr(pos + 1)};
+}
+
+} // namespace
 
 namespace parser
 {
 
-// ─── Constructor ──────────────────────────────────────────────────────────────
+// ─── Constructor
+// ──────────────────────────────────────────────────────────────
 
 Parser::Parser(std::vector<Token> tokens)
-    : m_tokens(std::move(tokens))
-{}
-
-// ─── Token stream helpers ─────────────────────────────────────────────────────
-
-const Token& Parser::peek(int offset) const
+    : m_tokens_(std::move(tokens))
 {
-    size_t idx = m_pos + static_cast<size_t>(offset);
-    if (idx >= m_tokens.size())
-        return m_tokens.back(); // Eof sentinel
-    return m_tokens[idx];
 }
 
-const Token& Parser::advance()
+// ─── Token stream helpers
+// ─────────────────────────────────────────────────────
+bool Parser::IsAssignment(const std::string& str) const
 {
-    const Token& tok = m_tokens[m_pos];
-    if (m_pos + 1 < m_tokens.size()) ++m_pos;
-    return tok;
-}
-
-bool Parser::check(TokenType type) const
-{
-    return peek().type == type;
-}
-
-bool Parser::match(TokenType type)
-{
-    if (!check(type)) return false;
-    advance();
+    auto pos = str.find('=');
+    if (pos == std::string::npos || pos == 0)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < pos; ++i) // walk the KEY only: str[0..pos)
+    {
+        auto cha = static_cast<unsigned char>(str[i]);
+        if (i == 0)
+        {
+            if (!std::isalpha(cha) && cha != '_')
+                return false;
+        }
+        else
+        {
+            if (!std::isalnum(cha) && cha != '_')
+                return false;
+        }
+    }
     return true;
 }
 
-const Token& Parser::expect(TokenType type, const char* context)
+const Token& Parser::Peek(int offset) const
 {
-    if (!check(type))
+    size_t idx = m_pos_ + static_cast<size_t>(offset);
+    if (idx >= m_tokens_.size())
+        return m_tokens_.back(); // Eof sentinel
+    return m_tokens_[idx];
+}
+
+const Token& Parser::Advance()
+{
+    const Token& tok = m_tokens_[m_pos_];
+    if (m_pos_ + 1 < m_tokens_.size())
+        ++m_pos_;
+    return tok;
+}
+
+bool Parser::Check(TokenType type) const
+{
+    return Peek().type == type;
+}
+
+bool Parser::Match(TokenType type)
+{
+    if (!Check(type))
+        return false;
+    Advance();
+    return true;
+}
+
+const Token& Parser::Expect(TokenType type, const char* context)
+{
+    if (!Check(type))
     {
-        const Token& got = peek();
-        throw ParseError(
-            std::string("expected ") + std::string(tokenTypeName(type)) +
-            " " + context + ", got '" + got.value + "'",
-            got.line, got.col);
+        const Token& got = Peek();
+        throw ParserException(std::string("expected ") +
+                                  std::string(tokenTypeName(type)) +
+                                  " " + context + ", got '" +
+                                  got.value + "'",
+                              got.line,
+                              got.col);
     }
-    return advance();
+    return Advance();
 }
 
-bool Parser::atEnd() const
+bool Parser::AtEnd() const
 {
-    return peek().type == TokenType::Eof;
+    return Peek().type == TokenType::Eof;
 }
 
-void Parser::skipNewlines()
+void Parser::SkipNewlines()
 {
-    while (check(TokenType::Newline))
-        advance();
+    while (Check(TokenType::Newline))
+        Advance();
 }
 
-// ─── Classification helpers ───────────────────────────────────────────────────
-
-bool Parser::isWordLike(TokenType t) const
+std::unique_ptr<ast::AstNode> Parser::ParseSimpleCommand()
 {
-    switch (t)
+    std::vector<std::string> argv;
+    std::vector<ast::Redirect> redirects;
+    std::vector<std::pair<std::string, std::string>> assignments;
+    while (!AtEnd())
+    {
+        if (Check(TokenType::RedirAppend))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected filename after >>",
+                                      Peek().line,
+                                      Peek().col);
+            auto redir = ast::Redirect(ast::Redirect::Kind::Append,
+                                       optr.fd,
+                                       Advance().value);
+            redirects.push_back(std::move(redir));
+        }
+        else if (Check(TokenType::RedirBothAppend))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected filename after &>> ",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::BothAppend,
+                                   optr.fd,
+                                   Advance().value);
+        }
+        else if (Check(TokenType::RedirBoth))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected filename after &>",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::Both,
+                                   optr.fd,
+                                   Advance().value);
+        }
+        else if (Check(TokenType::RedirIn))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected filename after < ",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::In,
+                                   optr.fd,
+                                   Advance().value);
+        }
+        else if (Check(TokenType::RedirReadWrite))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected filename after <> ",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::ReadWrite,
+                                   optr.fd,
+                                   Advance().value);
+        }
+        else if (Check(TokenType::RedirOut))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected filename after >",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::Out,
+                                   optr.fd,
+                                   Advance().value);
+        }
+        else if (Check(TokenType::RedirClobber))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected filename after >|",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::Clobber,
+                                   optr.fd,
+                                   Advance().value);
+        }
+        else if (Check(TokenType::DupOut))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected fd/target after >&",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::DupOut,
+                                   optr.fd,
+                                   Advance().value);
+        }
+        else if (Check(TokenType::DupIn))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected fd/target after <&",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::DupIn,
+                                   optr.fd,
+                                   Advance().value);
+        }
+        else if (Check(TokenType::Word) ||
+                 Check(TokenType::SingleQuoted) ||
+                 Check(TokenType::DoubleQuoted) ||
+                 (!argv.empty() && IsWordLike(Peek().type)))
+        {
+            // A keyword (done, fi, in, ...) is a plain argument once we are
+            // past the command word; at command position it stays a keyword.
+            const bool isWord = Check(TokenType::Word);
+            std::string word  = Advance().value;
+            if (isWord && argv.empty() && IsAssignment(word))
+                assignments.emplace_back(
+                    SplitOnce(word, assignMentOp));
+            else
+                argv.emplace_back(std::move(word));
+        }
+        else
+        {
+            break;
+        }
+    }
+    if (argv.empty() && redirects.empty() && assignments.empty())
+    {
+        const Token& bad = Peek();
+        throw ParserException("unexpected token '" + bad.value + "'",
+                              bad.line,
+                              bad.col);
+    }
+    return std::make_unique<ast::SimpleCommand>(
+        std::move(argv),
+        std::move(redirects),
+        std::move(assignments));
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParsePipeline()
+{
+    bool bang = Match(TokenType::Bang);
+
+    auto first = ParseCommand();
+    if (!bang && !Check(TokenType::Pipe))
+    {
+        return first;
+    }
+    std::vector<std::unique_ptr<ast::AstNode>> stages;
+    stages.push_back(std::move(first));
+    while (Match(TokenType::Pipe))
+    {
+        SkipNewlines();
+        stages.push_back(ParseCommand());
+    }
+    return std::make_unique<ast::Pipeline>(std::move(stages), bang);
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseAndOr()
+{
+    auto left = ParsePipeline();
+    while (Check(TokenType::And) || Check(TokenType::Or))
+    {
+        ast::AndOr::Op optrtr = Check(TokenType::And)
+                                    ? ast::AndOr::Op::And
+                                    : ast::AndOr::Op::Or;
+        Advance();
+        SkipNewlines();
+        auto right = ParsePipeline();
+        left = std::make_unique<ast::AndOr>(std::move(left),
+                                            optrtr,
+                                            std::move(right));
+    }
+    return left;
+}
+
+bool Parser::IsWordLike(TokenType type) const
+{
+    switch (type)
     {
         case TokenType::Word:
         case TokenType::SingleQuoted:
         case TokenType::DoubleQuoted:
-        // Keywords are word-like when used as arguments
+        // Keywords are plain words when used as arguments.
         case TokenType::If:
         case TokenType::Then:
         case TokenType::Elif:
@@ -84,59 +321,27 @@ bool Parser::isWordLike(TokenType t) const
         case TokenType::Do:
         case TokenType::Done:
         case TokenType::For:
+        case TokenType::Foreach:
         case TokenType::In:
         case TokenType::Case:
         case TokenType::Esac:
+        case TokenType::End:
         case TokenType::Select:
         case TokenType::Function:
         case TokenType::Time:
-        case TokenType::Bang:
             return true;
         default:
             return false;
     }
 }
 
-bool Parser::isRedirectToken(TokenType t) const
+bool Parser::IsListTerminator(TokenType type) const
 {
-    switch (t)
+    switch (type)
     {
-        case TokenType::RedirIn:
-        case TokenType::RedirOut:
-        case TokenType::RedirAppend:
-        case TokenType::RedirClobber:
-        case TokenType::DupIn:
-        case TokenType::DupOut:
-        case TokenType::RedirBoth:
-        case TokenType::RedirBothAppend:
-        case TokenType::RedirReadWrite:
-        case TokenType::HereDoc:
-        case TokenType::HereDocDash:
-        case TokenType::HereString:
-            return true;
-        default:
-            return false;
-    }
-}
-
-bool Parser::isPipelineTerminator(TokenType t) const
-{
-    switch (t)
-    {
-        case TokenType::Pipe:
-        case TokenType::PipeBoth:
-        case TokenType::And:
-        case TokenType::Or:
-        case TokenType::Semi:
-        case TokenType::DoubleSemi:
-        case TokenType::SemiAmp:
-        case TokenType::DoubleSemiAmp:
-        case TokenType::Background:
-        case TokenType::Newline:
+        case TokenType::Eof:
         case TokenType::RParen:
         case TokenType::RBrace:
-        case TokenType::Eof:
-        // Compound-command boundary keywords
         case TokenType::Then:
         case TokenType::Do:
         case TokenType::Done:
@@ -144,554 +349,259 @@ bool Parser::isPipelineTerminator(TokenType t) const
         case TokenType::Else:
         case TokenType::Elif:
         case TokenType::Esac:
-        case TokenType::In:
+        case TokenType::End:
+        case TokenType::DoubleSemi:
+        case TokenType::SemiAmp:
+        case TokenType::DoubleSemiAmp:
             return true;
         default:
             return false;
     }
 }
 
-bool Parser::isListTerminator(TokenType t) const
+std::unique_ptr<ast::AstNode> Parser::ParseList()
 {
-    return t == TokenType::RParen ||
-           t == TokenType::RBrace ||
-           t == TokenType::Eof;
-}
-
-std::string Parser::tokenWord(const Token& tok) const
-{
-    return tok.value;
-}
-
-// ─── Redirect parsing ─────────────────────────────────────────────────────────
-
-Redirect Parser::parseOneRedirect()
-{
-    const Token& op = advance(); // the redirect operator token
-    Redirect r;
-
-    switch (op.type)
+    std::vector<ast::List::Item> items;
+    SkipNewlines();
+    while (!AtEnd() && !IsListTerminator(Peek().type))
     {
-        case TokenType::RedirIn:       r.kind = Redirect::Kind::In;         break;
-        case TokenType::RedirOut:      r.kind = Redirect::Kind::Out;        break;
-        case TokenType::RedirAppend:   r.kind = Redirect::Kind::Append;     break;
-        case TokenType::RedirClobber:  r.kind = Redirect::Kind::Clobber;    break;
-        case TokenType::DupIn:         r.kind = Redirect::Kind::DupIn;      break;
-        case TokenType::DupOut:        r.kind = Redirect::Kind::DupOut;     break;
-        case TokenType::RedirBoth:     r.kind = Redirect::Kind::Both;       break;
-        case TokenType::RedirBothAppend: r.kind = Redirect::Kind::BothAppend; break;
-        case TokenType::RedirReadWrite:r.kind = Redirect::Kind::ReadWrite;  break;
-        case TokenType::HereDoc:       r.kind = Redirect::Kind::HereDoc;    break;
-        case TokenType::HereDocDash:   r.kind = Redirect::Kind::HereDocDash;break;
-        case TokenType::HereString:    r.kind = Redirect::Kind::HereString; break;
-        default:
-            throw ParseError("internal: parseOneRedirect called on non-redirect",
-                             op.line, op.col);
-    }
-
-    r.fd = op.fd; // -1 if not fd-prefixed
-
-    // The target word must follow immediately
-    if (!isWordLike(peek().type))
-    {
-        const Token& bad = peek();
-        throw ParseError("expected filename/target after redirect operator",
-                         bad.line, bad.col);
-    }
-    r.target = tokenWord(advance());
-    return r;
-}
-
-void Parser::parseRedirects(std::vector<Redirect>& out)
-{
-    while (isRedirectToken(peek().type))
-        out.push_back(parseOneRedirect());
-}
-
-// ─── parseList ────────────────────────────────────────────────────────────────
-// list = andor (( ';' | '&' | '\n'+ ) andor)* (';' | '&')?
-
-AstNodePtr Parser::parse()
-{
-    skipNewlines();
-    AstNodePtr result = parseList();
-    if (!atEnd() && !isListTerminator(peek().type))
-    {
-        const Token& bad = peek();
-        throw ParseError("unexpected token '" + bad.value + "'", bad.line, bad.col);
-    }
-    return result;
-}
-
-AstNodePtr Parser::parseList()
-{
-    auto list = std::make_unique<ListNode>();
-    list->line = peek().line;
-
-    // Parse at least one item
-    {
-        AstNodePtr node = parseAndOr();
-        bool bg = false;
-        if (match(TokenType::Background))
-            bg = true;
+        auto node = ParseAndOr();
+        bool background = false;
+        if (Match(TokenType::Background))
+        {
+            background = true;
+        }
         else
-            match(TokenType::Semi); // optional trailing ;
-        skipNewlines();
-        list->items.push_back({ std::move(node), bg });
-    }
-
-    // Continue while not at a list-terminating token
-    while (!atEnd() && !isListTerminator(peek().type) &&
-           !check(TokenType::Then) && !check(TokenType::Do) &&
-           !check(TokenType::Done) && !check(TokenType::Fi) &&
-           !check(TokenType::Else) && !check(TokenType::Elif) &&
-           !check(TokenType::Esac))
-    {
-        AstNodePtr node = parseAndOr();
-        bool bg = false;
-        if (match(TokenType::Background))
-            bg = true;
-        else
-            match(TokenType::Semi);
-        skipNewlines();
-        list->items.push_back({ std::move(node), bg });
-    }
-
-    // If only one item with no background flag, unwrap the list
-    if (list->items.size() == 1 && !list->items[0].background)
-        return std::move(list->items[0].node);
-
-    return list;
-}
-
-// ─── parseAndOr ──────────────────────────────────────────────────────────────
-// andor = pipeline (('&&' | '||') '\n'* pipeline)*
-
-AstNodePtr Parser::parseAndOr()
-{
-    AstNodePtr lhs = parsePipeline();
-
-    while (check(TokenType::And) || check(TokenType::Or))
-    {
-        AndOrNode::Op op = check(TokenType::And) ? AndOrNode::Op::And
-                                                  : AndOrNode::Op::Or;
-        advance();
-        skipNewlines();
-
-        auto node    = std::make_unique<AndOrNode>();
-        node->line   = peek().line;
-        node->lhs    = std::move(lhs);
-        node->op     = op;
-        node->rhs    = parsePipeline();
-        lhs          = std::move(node);
-    }
-
-    return lhs;
-}
-
-// ─── parsePipeline ────────────────────────────────────────────────────────────
-// pipeline = ['!'] command ('|' '\n'* command)*
-
-AstNodePtr Parser::parsePipeline()
-{
-    bool bang = false;
-    if (match(TokenType::Bang))
-        bang = true;
-
-    auto pipe = std::make_unique<PipelineNode>();
-    pipe->line = peek().line;
-    pipe->bang = bang;
-    pipe->stages.push_back(parseCommand());
-
-    while (check(TokenType::Pipe) || check(TokenType::PipeBoth))
-    {
-        advance();
-        skipNewlines();
-        pipe->stages.push_back(parseCommand());
-    }
-
-    // If single stage and no bang, unwrap to avoid unnecessary PipelineNode
-    if (!bang && pipe->stages.size() == 1)
-        return std::move(pipe->stages[0]);
-
-    return pipe;
-}
-
-// ─── parseCommand ─────────────────────────────────────────────────────────────
-// Dispatches to a compound command or simple command.
-
-AstNodePtr Parser::parseCommand()
-{
-    skipNewlines();
-    TokenType t = peek().type;
-
-    if (t == TokenType::LParen)   return parseSubshell();
-    if (t == TokenType::LBrace)   return parseGroup();
-    if (t == TokenType::If)       return parseIf();
-    if (t == TokenType::While)    return parseWhile();
-    if (t == TokenType::Until)    return parseWhile(); // reuses parseWhile
-    if (t == TokenType::For)      return parseFor();
-    if (t == TokenType::Case)     return parseCase();
-    if (t == TokenType::Function) { advance(); /* consume 'function' */ }
-
-    // Function shorthand: word followed by ()
-    if (t == TokenType::Word &&
-        peek(1).type == TokenType::LParen &&
-        peek(2).type == TokenType::RParen)
-    {
-        std::string name = tokenWord(advance()); // word
-        advance(); // (
-        advance(); // )
-        skipNewlines();
-        return parseFunction(name);
-    }
-
-    // 'function name' form (already consumed 'function' above if t == Function)
-    if (t == TokenType::Function)
-    {
-        // peek() is now the function name
-        if (!isWordLike(peek().type))
         {
-            const Token& bad = peek();
-            throw ParseError("expected function name", bad.line, bad.col);
-        }
-        std::string name = tokenWord(advance());
-        // optional ()
-        if (check(TokenType::LParen))
-        {
-            advance(); // (
-            expect(TokenType::RParen, "after function name");
-        }
-        skipNewlines();
-        return parseFunction(name);
-    }
-
-    return parseSimpleCommand();
-}
-
-// ─── parseSimpleCommand ───────────────────────────────────────────────────────
-
-AstNodePtr Parser::parseSimpleCommand()
-{
-    auto cmd = std::make_unique<SimpleCommand>();
-    cmd->line = peek().line;
-
-    // Collect words, redirects, and leading VAR=value assignments
-    bool pastAssignments = false;
-
-    while (!isPipelineTerminator(peek().type))
-    {
-        // Redirect interspersed anywhere in the word list
-        if (isRedirectToken(peek().type))
-        {
-            parseRedirects(cmd->redirects);
-            continue;
+            (void)Match(TokenType::Semi);
         }
 
-        if (!isWordLike(peek().type))
+        items.push_back(
+            {.node = std::move(node), .background = background});
+        SkipNewlines();
+        if (IsListTerminator(Peek().type))
+        {
             break;
+        }
+    }
+    // Unwrap a single non-background item — no need for a List wrapper.
+    if (items.size() == 1 && !items[0].background)
+    {
+        return std::move(items[0].node);
+    }
+    return std::make_unique<ast::List>(std::move(items));
+}
 
-        const Token& tok = advance();
-        std::string  w   = tokenWord(tok);
+std::unique_ptr<ast::AstNode> Parser::ExpectList(const char* context)
+{
+    SkipNewlines();
+    if (AtEnd() || IsListTerminator(Peek().type))
+    {
+        const Token& bad = Peek();
+        throw ParserException(std::string("expected command ") + context,
+                              bad.line,
+                              bad.col);
+    }
+    return ParseList();
+}
 
-        // Leading VAR=value before the command word
-        if (!pastAssignments)
+std::unique_ptr<ast::AstNode> Parser::Parse()
+{
+    SkipNewlines();
+    auto root = ParseList();
+    if (!AtEnd())
+    {
+        const Token& bad = Peek();
+        throw ParserException("unexpected token '" + bad.value + "'",
+                              bad.line,
+                              bad.col);
+    }
+    return root;
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseSubshell()
+{
+    Expect(TokenType::LParen, "at start of subshell");
+    auto body = ExpectList("inside subshell");
+    Expect(TokenType::RParen, "to close subshell");
+    return std::make_unique<ast::Subshell>(std::move(body));
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseGroup()
+{
+    Expect(TokenType::LBrace, "at start of group");
+    auto body = ExpectList("inside group");
+    Expect(TokenType::RBrace, "to close group");
+    return std::make_unique<ast::Group>(std::move(body));
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseFunction(std::string name)
+{
+    auto body = ParseCommand();
+    return std::make_unique<ast::Function>(std::move(name),
+                                           std::move(body));
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseWhile()
+{
+    bool until = Check(TokenType::Until);
+    Advance();
+    auto cond = ExpectList("after while/until");
+    Expect(TokenType::Do, "Parsing (While|Until) loop");
+    auto body = ExpectList("in while/until body");
+    Expect(TokenType::Done, "Parsing (While|Until) loop");
+    return std::make_unique<ast::While>(std::move(cond),
+                                        std::move(body),
+                                        until);
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseFor()
+{
+    bool isFor = Check(TokenType::For);
+    Advance();
+    std::vector<std::string> words;
+    std::unique_ptr<ast::AstNode> body;
+    std::string var;
+    if (isFor)
+    {
+        var =
+            Expect(TokenType::Word, "Wrong Condiiton for loop").value;
+        if (Match(TokenType::In))
         {
-            // Check "IDENTIFIER=" prefix
-            size_t eq = w.find('=');
-            if (eq != std::string::npos && eq > 0)
+            while (Check(TokenType::Word))
             {
-                std::string key = w.substr(0, eq);
-                std::string val = w.substr(eq + 1);
-                // Verify key is a valid identifier
-                bool validId = true;
-                for (size_t i = 0; i < key.size(); ++i)
-                {
-                    char c = key[i];
-                    if (i == 0) validId = (std::isalpha(static_cast<unsigned char>(c)) || c == '_');
-                    else        validId = (std::isalnum(static_cast<unsigned char>(c)) || c == '_');
-                    if (!validId) break;
-                }
-                if (validId)
-                {
-                    cmd->assignments.emplace_back(std::move(key), std::move(val));
-                    continue;
-                }
+                words.push_back(Advance().value);
             }
         }
-
-        pastAssignments = true;
-        cmd->argv.push_back(std::move(w));
-    }
-
-    // Trailing redirects after all words
-    parseRedirects(cmd->redirects);
-
-    if (cmd->argv.empty() && cmd->assignments.empty() && cmd->redirects.empty())
-    {
-        const Token& bad = peek();
-        throw ParseError("empty command", bad.line, bad.col);
-    }
-
-    return cmd;
-}
-
-// ─── parseIf ─────────────────────────────────────────────────────────────────
-// if cond; then body; (elif cond; then body;)* (else body;)? fi
-
-AstNodePtr Parser::parseIf()
-{
-    int startLine = peek().line;
-    expect(TokenType::If, "at start of if");
-
-    auto node = std::make_unique<IfNode>();
-    node->line = startLine;
-
-    // First if branch
-    {
-        skipNewlines();
-        AstNodePtr cond = parseList();
-        skipNewlines();
-        expect(TokenType::Then, "after if condition");
-        skipNewlines();
-        AstNodePtr body = parseList();
-        skipNewlines();
-        node->branches.push_back({ std::move(cond), std::move(body) });
-    }
-
-    // elif branches
-    while (check(TokenType::Elif))
-    {
-        advance(); // consume elif
-        skipNewlines();
-        AstNodePtr cond = parseList();
-        skipNewlines();
-        expect(TokenType::Then, "after elif condition");
-        skipNewlines();
-        AstNodePtr body = parseList();
-        skipNewlines();
-        node->branches.push_back({ std::move(cond), std::move(body) });
-    }
-
-    // optional else
-    if (match(TokenType::Else))
-    {
-        skipNewlines();
-        node->else_body = parseList();
-        skipNewlines();
-    }
-
-    expect(TokenType::Fi, "to close if statement");
-    return node;
-}
-
-// ─── parseWhile ──────────────────────────────────────────────────────────────
-// while cond; do body; done    (or until)
-
-AstNodePtr Parser::parseWhile()
-{
-    auto node = std::make_unique<WhileNode>();
-    node->line = peek().line;
-
-    if (check(TokenType::Until))
-    {
-        node->until = true;
-        advance();
+        (void)Match(TokenType::Semi);
+        SkipNewlines();
+        Expect(TokenType::Do, "Invalid syntax for 'For loop'");
+        body = ExpectList("in for body");
+        Expect(TokenType::Done, "Invalid syntax for 'For loop'");
     }
     else
     {
-        expect(TokenType::While, "at start of while/until");
-    }
-
-    skipNewlines();
-    node->condition = parseList();
-    skipNewlines();
-    expect(TokenType::Do, "after while/until condition");
-    skipNewlines();
-    node->body = parseList();
-    skipNewlines();
-    expect(TokenType::Done, "to close while/until");
-
-    return node;
-}
-
-// ─── parseFor ────────────────────────────────────────────────────────────────
-// for var [in word...]; do body; done
-
-AstNodePtr Parser::parseFor()
-{
-    auto node = std::make_unique<ForNode>();
-    node->line = peek().line;
-
-    expect(TokenType::For, "at start of for");
-    skipNewlines();
-
-    if (!check(TokenType::Word))
-    {
-        const Token& bad = peek();
-        throw ParseError("expected variable name after 'for'", bad.line, bad.col);
-    }
-    node->var = tokenWord(advance());
-    skipNewlines();
-
-    // Optional "in word..."
-    if (match(TokenType::In))
-    {
-        while (isWordLike(peek().type))
-            node->words.push_back(tokenWord(advance()));
-        // consume trailing ; or newline
-        if (!match(TokenType::Semi))
-            skipNewlines();
-    }
-    else
-    {
-        // for var; do — iterates over "$@"
-        match(TokenType::Semi);
-    }
-
-    skipNewlines();
-    expect(TokenType::Do, "after for clause");
-    skipNewlines();
-    node->body = parseList();
-    skipNewlines();
-    expect(TokenType::Done, "to close for loop");
-
-    return node;
-}
-
-// ─── parseCase ───────────────────────────────────────────────────────────────
-// case word in (pattern|...) ) body ;; ... esac
-
-AstNodePtr Parser::parseCase()
-{
-    auto node = std::make_unique<CaseNode>();
-    node->line = peek().line;
-
-    expect(TokenType::Case, "at start of case");
-    skipNewlines();
-
-    if (!isWordLike(peek().type))
-    {
-        const Token& bad = peek();
-        throw ParseError("expected word after 'case'", bad.line, bad.col);
-    }
-    node->word = tokenWord(advance());
-    skipNewlines();
-    expect(TokenType::In, "after case word");
-    skipNewlines();
-
-    // Parse arms until esac
-    while (!check(TokenType::Esac) && !atEnd())
-    {
-        CaseNode::Arm arm;
-
-        // Optional leading (
-        match(TokenType::LParen);
-
-        // One or more patterns separated by |
-        if (!isWordLike(peek().type))
+        var =
+            Expect(TokenType::Word, "Wrong Condiiton for loop").value;
+        Expect(TokenType::LParen,
+               "Invalid syntax for 'For each loop'");
+        while (Check(TokenType::Word))
         {
-            const Token& bad = peek();
-            throw ParseError("expected pattern in case arm", bad.line, bad.col);
+            words.push_back(Advance().value);
         }
-        arm.patterns.push_back(tokenWord(advance()));
-        while (check(TokenType::Pipe))
+        Expect(TokenType::RParen,
+               "Invalid syntax for 'For each loop'");
+        (void)Match(TokenType::Semi);
+        SkipNewlines();
+        body = ExpectList("in foreach body");
+        Expect(TokenType::End, "Invalid syntax for 'For each loop'");
+    }
+    return std::make_unique<ast::For>(std::move(var),
+                                      std::move(words),
+                                      std::move(body));
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseIf()
+{
+    Expect(TokenType::If, "Invalid syntax for 'If / else'");
+    auto cond = ExpectList("after if");
+    Expect(TokenType::Then, "Invalid syntax for 'If / else'");
+    auto body = ExpectList("after then");
+    std::vector<ast::If::Branch> branches;
+    std::unique_ptr<ast::AstNode> elseBody;
+    branches.emplace_back(std::move(cond), std::move(body));
+    while (Match(TokenType::Elif))
+    {
+        cond = ExpectList("after elif");
+        Expect(TokenType::Then, "Invalid syntax for 'If / else'");
+        body = ExpectList("after then");
+        branches.emplace_back(std::move(cond), std::move(body));
+    }
+    if (Match(TokenType::Else))
+    {
+        elseBody = ExpectList("after else");
+    }
+    Expect(TokenType::Fi, "Invalid syntax for 'If / else'");
+
+    return std::make_unique<ast::If>(std::move(branches),
+                                     std::move(elseBody));
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseCase()
+{
+    Expect(TokenType::Case, "Invalid syntax for 'Case'");
+    auto word =
+        Expect(TokenType::Word, "Invalid syntax for 'Case'").value;
+    Expect(TokenType::In, "Invalid syntax for 'Case'");
+    std::vector<ast::Case::Arm> arms;
+    while (!Check(TokenType::Esac))
+    {
+        std::vector<std::string> patterns;
+        if (Match(TokenType::LParen))
         {
-            advance();
-            if (!isWordLike(peek().type))
+        }
+        patterns = {
+            Expect(TokenType::Word, "Invalid syntax for 'Case'")
+                .value};
+        while (Match(TokenType::Pipe))
+        {
+            patterns.push_back(
+                Expect(TokenType::Word, "Invalid syntax for 'Case'")
+                    .value);
+        }
+        Expect(TokenType::RParen, "Invalid syntax for 'Case'");
+        auto armBody = ParseList();
+        if (Match(TokenType::DoubleSemi))
+        {
+        }
+        arms.emplace_back(
+            ast::Case::Arm(std::move(patterns), std::move(armBody)));
+    }
+    Expect(TokenType::Esac, "Invalid syntax for 'Case'");
+    return std::make_unique<ast::Case>(std::move(word),
+                                       std::move(arms));
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseCommand()
+{
+    SkipNewlines();
+    const auto& typ = Peek().type;
+    switch (typ)
+    {
+        case TokenType::LParen:
+            return ParseSubshell();
+
+        case TokenType::LBrace:
+            return ParseGroup();
+
+        case TokenType::If:
+            return ParseIf();
+
+        case TokenType::While:
+        case TokenType::Until:
+        {
+            return ParseWhile();
+        }
+        case TokenType::For:
+        case TokenType::Foreach:
+            return ParseFor();
+        case TokenType::Case:
+            return ParseCase();
+        case TokenType::Word:
+        {
+            if (Peek(1).type == TokenType::LParen &&
+                Peek(2).type == TokenType::RParen)
             {
-                const Token& bad = peek();
-                throw ParseError("expected pattern after '|' in case", bad.line, bad.col);
+                const auto name = Advance().value;
+                Advance(); // (
+                Advance(); // )
+                SkipNewlines();
+                return ParseFunction(name);
             }
-            arm.patterns.push_back(tokenWord(advance()));
+            return ParseSimpleCommand();
         }
-
-        expect(TokenType::RParen, "after case pattern");
-        skipNewlines();
-
-        // Arm body: parse until ;; ;& ;;&
-        auto body = std::make_unique<ListNode>();
-        body->line = peek().line;
-        while (!check(TokenType::DoubleSemi) && !check(TokenType::SemiAmp) &&
-               !check(TokenType::DoubleSemiAmp) && !check(TokenType::Esac) && !atEnd())
-        {
-            AstNodePtr item = parseAndOr();
-            bool bg = false;
-            if (match(TokenType::Background)) bg = true;
-            else match(TokenType::Semi);
-            skipNewlines();
-            body->items.push_back({ std::move(item), bg });
-        }
-        if (body->items.size() == 1 && !body->items[0].background)
-            arm.body = std::move(body->items[0].node);
-        else if (!body->items.empty())
-            arm.body = std::move(body);
-
-        // Consume terminator
-        if (check(TokenType::DoubleSemi) || check(TokenType::SemiAmp) ||
-            check(TokenType::DoubleSemiAmp))
-            advance();
-
-        skipNewlines();
-        node->arms.push_back(std::move(arm));
+        default:
+            return ParseSimpleCommand();
     }
-
-    expect(TokenType::Esac, "to close case statement");
-    return node;
 }
-
-// ─── parseSubshell ───────────────────────────────────────────────────────────
-// ( list )
-
-AstNodePtr Parser::parseSubshell()
-{
-    int startLine = peek().line;
-    expect(TokenType::LParen, "at start of subshell");
-    skipNewlines();
-
-    auto node = std::make_unique<SubshellNode>();
-    node->line = startLine;
-    node->body = parseList();
-
-    skipNewlines();
-    expect(TokenType::RParen, "to close subshell");
-    return node;
-}
-
-// ─── parseGroup ──────────────────────────────────────────────────────────────
-// { list ; }
-
-AstNodePtr Parser::parseGroup()
-{
-    int startLine = peek().line;
-    expect(TokenType::LBrace, "at start of group command");
-    skipNewlines();
-
-    auto node = std::make_unique<GroupNode>();
-    node->line = startLine;
-    node->body = parseList();
-
-    skipNewlines();
-    // Require ; or newline before }
-    if (!check(TokenType::RBrace))
-    {
-        const Token& bad = peek();
-        throw ParseError("expected '}' to close group command", bad.line, bad.col);
-    }
-    advance();
-    return node;
-}
-
-// ─── parseFunction ───────────────────────────────────────────────────────────
-// name() compound-command
-
-AstNodePtr Parser::parseFunction(const std::string& name)
-{
-    auto node  = std::make_unique<FunctionNode>();
-    node->line = peek().line;
-    node->name = name;
-    node->body = parseCommand(); // must be a compound command
-    return node;
-}
-
 } // namespace parser

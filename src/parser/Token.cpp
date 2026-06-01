@@ -65,6 +65,8 @@ std::string_view tokenTypeName(TokenType type)
         case TokenType::Do:               return "Do";
         case TokenType::Done:             return "Done";
         case TokenType::For:              return "For";
+         case TokenType::Foreach:         return "Foreach";
+        case TokenType::End:              return "End";
         case TokenType::In:               return "In";
         case TokenType::Case:             return "Case";
         case TokenType::Esac:             return "Esac";

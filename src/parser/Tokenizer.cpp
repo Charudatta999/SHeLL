@@ -1,6 +1,7 @@
 #include "parser/Tokenizer.hpp"
 
 #include <cctype>
+#include <cstddef>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -9,190 +10,253 @@ namespace parser
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
 
-Tokenizer::Tokenizer(std::string input)
-    : m_input(std::move(input))
-{}
-
-// ─── Character navigation ─────────────────────────────────────────────────────
-
-char Tokenizer::peek(int offset) const
+Tokenizer::Tokenizer(const std::string& command)
+    : m_command_(command)
 {
-    size_t idx = m_pos + static_cast<size_t>(offset);
-    if (idx >= m_input.size()) return '\0';
-    return m_input[idx];
 }
 
-char Tokenizer::advance()
+char Tokenizer::Peek(int offset) const
 {
-    char c = m_input[m_pos++];
-    if (c == '\n') { ++m_line; m_col = 1; }
-    else           { ++m_col; }
+    size_t idx = m_pos_ + static_cast<size_t>(offset);
+    if (idx >= m_command_.size())
+        return '\0';
+    return m_command_[idx];
+}
+
+bool Tokenizer::AtEnd() const
+{
+    return m_pos_ >= m_command_.size();
+}
+
+void Tokenizer::SkipWhitespace()
+{
+    while (!AtEnd() && (Peek() == ' ' || Peek() == '\t')) // not '\n'
+        Advance();
+}
+
+char Tokenizer::Advance()
+{
+    char c = m_command_[m_pos_++];
+    if (c == '\n')
+    {
+        ++m_line_;
+        m_col_ = 1;
+    }
+    else
+    {
+        ++m_col_;
+    }
     return c;
 }
 
-bool Tokenizer::atEnd() const
+bool Tokenizer::IsOperatorStart(char chr) const
 {
-    return m_pos >= m_input.size();
+    return chr == '|' || chr == '&' || chr == ';' || chr == '<' || chr == '>' || chr == '(' ||
+           chr == ')' || chr == '{' || chr == '}';
 }
 
-void Tokenizer::skipWhitespace()
+bool Tokenizer::IsWordChar(char chr) const
 {
-    while (!atEnd() && (peek() == ' ' || peek() == '\t'))
-        advance();
-}
-
-// ─── Character classification ─────────────────────────────────────────────────
-
-bool Tokenizer::isOperatorStart(char c) const
-{
-    return c == '|' || c == '&' || c == ';' || c == '<' || c == '>' ||
-           c == '(' || c == ')' || c == '{' || c == '}';
-}
-
-bool Tokenizer::isWordChar(char c) const
-{
-    return c != '\0' && c != '\n' && c != ' ' && c != '\t' &&
-           !isOperatorStart(c) && c != '\'' && c != '"';
+    return chr != '\0' && chr != '\n' && chr != ' ' && chr != '\t' && !IsOperatorStart(chr) &&
+           chr != '\'' && chr != '"';
 }
 
 // ─── Single-quoted string ─────────────────────────────────────────────────────
 
-Token Tokenizer::readSingleQuoted()
+Token Tokenizer::ReadSingleQuoted()
 {
-    int tokLine = m_line;
-    int tokCol  = m_col;
-    advance(); // opening '
+    size_t tokLine = m_line_;
+    size_t tokCol = m_col_;
+    Advance(); // opening '
 
     std::string value;
-    while (!atEnd() && peek() != '\'')
-        value += advance();
+    while (!AtEnd() && Peek() != '\'')
+        value += Advance();
 
-    if (atEnd())
+    if (AtEnd())
         throw std::runtime_error("unterminated single-quoted string at line " +
                                  std::to_string(tokLine));
-    advance(); // closing '
-    return { TokenType::SingleQuoted, value, -1, tokLine, tokCol };
+    Advance(); // closing '
+    return Token{
+        .type = TokenType::SingleQuoted, .value = std::move(value), .line = tokLine, .col = tokCol};
 }
 
 // ─── Double-quoted string ─────────────────────────────────────────────────────
 
-Token Tokenizer::readDoubleQuoted()
+Token Tokenizer::ReadDoubleQuoted()
 {
-    int tokLine = m_line;
-    int tokCol  = m_col;
-    advance(); // opening "
-
+    size_t tokLine = m_line_;
+    size_t tokCol = m_col_;
+    Advance(); // opening "
     std::string value;
-    while (!atEnd() && peek() != '"')
+    while (!AtEnd() && Peek() != '"')
     {
-        if (peek() == '\\' && m_pos + 1 < m_input.size())
+        if (Peek() == '\\' && m_pos_ + 1 < m_command_.size())
         {
-            value += advance(); // backslash
-            value += advance(); // escaped char
+            value += Advance(); // backslash
+            value += Advance(); // escaped char
         }
         else
         {
-            value += advance();
+            value += Advance();
         }
     }
 
-    if (atEnd())
+    if (AtEnd())
         throw std::runtime_error("unterminated double-quoted string at line " +
                                  std::to_string(tokLine));
-    advance(); // closing "
-    return { TokenType::DoubleQuoted, value, -1, tokLine, tokCol };
+    Advance(); // closing "
+    return Token{
+        .type = TokenType::DoubleQuoted, .value = value, .fd = -1, .line = tokLine, .col = tokCol};
 }
 
 // ─── Word ─────────────────────────────────────────────────────────────────────
 
-Token Tokenizer::readWord()
+Token Tokenizer::ReadWord()
 {
-    int tokLine = m_line;
-    int tokCol  = m_col;
+    size_t tokLine = m_line_;
+    size_t tokCol = m_col_;
 
     // ── Fd-prefixed redirect: single digit immediately followed by < or > ──
-    if (std::isdigit(static_cast<unsigned char>(peek())) &&
-        (peek(1) == '<' || peek(1) == '>'))
+    if (std::isdigit(static_cast<unsigned char>(Peek())) && (Peek(1) == '<' || Peek(1) == '>'))
     {
-        int  fd    = peek() - '0';
-        advance(); // consume digit
+        int fd = Peek() - '0';
+        Advance(); // consume digit
 
-        int  opLine = m_line;
-        int  opCol  = m_col;
-        char op     = advance(); // consume < or >
+        size_t opLine = m_line_;
+        size_t opCol = m_col_;
+        char op = Advance(); // consume < or >
 
         if (op == '<')
         {
-            if (peek() == '<')
+            if (Peek() == '<')
             {
-                advance();
-                if (peek() == '-') { advance(); return { TokenType::HereDocDash,  "", fd, opLine, opCol }; }
-                if (peek() == '<') { advance(); return { TokenType::HereString,   "", fd, opLine, opCol }; }
-                return { TokenType::HereDoc, "", fd, opLine, opCol };
+                Advance();
+                if (Peek() == '-')
+                {
+                    Advance();
+                    return Token{.type = TokenType::HereDocDash,
+                                 .value = "",
+                                 .fd = fd,
+                                 .line = opLine,
+                                 .col = opCol};
+                }
+                if (Peek() == '<')
+                {
+                    Advance();
+                    return Token{.type = TokenType::HereString,
+                                 .value = "",
+                                 .fd = fd,
+                                 .line = opLine,
+                                 .col = opCol};
+                }
+                return Token{.type = TokenType::HereDoc,
+                             .value = "",
+                             .fd = fd,
+                             .line = opLine,
+                             .col = opCol};
             }
-            if (peek() == '&') { advance(); return { TokenType::DupIn,        "", fd, opLine, opCol }; }
-            if (peek() == '>') { advance(); return { TokenType::RedirReadWrite,"", fd, opLine, opCol }; }
-            return { TokenType::RedirIn, "", fd, opLine, opCol };
+            if (Peek() == '&')
+            {
+                Advance();
+                return {
+                    .type = TokenType::DupIn, .value = "", .fd = fd, .line = opLine, .col = opCol};
+            }
+            if (Peek() == '>')
+            {
+                Advance();
+                return {.type = TokenType::RedirReadWrite,
+                        .value = "",
+                        .fd = fd,
+                        .line = opLine,
+                        .col = opCol};
+            }
+            return {
+                .type = TokenType::RedirIn, .value = "", .fd = fd, .line = opLine, .col = opCol};
         }
         else // '>'
         {
-            if (peek() == '>') { advance(); return { TokenType::RedirAppend,  "", fd, opLine, opCol }; }
-            if (peek() == '&') { advance(); return { TokenType::DupOut,       "", fd, opLine, opCol }; }
-            if (peek() == '|') { advance(); return { TokenType::RedirClobber, "", fd, opLine, opCol }; }
-            return { TokenType::RedirOut, "", fd, opLine, opCol };
+            if (Peek() == '>')
+            {
+                Advance();
+                return {.type = TokenType::RedirAppend,
+                        .value = "",
+                        .fd = fd,
+                        .line = opLine,
+                        .col = opCol};
+            }
+            if (Peek() == '&')
+            {
+                Advance();
+                return {
+                    .type = TokenType::DupOut, .value = "", .fd = fd, .line = opLine, .col = opCol};
+            }
+            if (Peek() == '|')
+            {
+                Advance();
+                return {.type = TokenType::RedirClobber,
+                        .value = "",
+                        .fd = fd,
+                        .line = opLine,
+                        .col = opCol};
+            }
+            return {
+                .type = TokenType::RedirOut, .value = "", .fd = fd, .line = opLine, .col = opCol};
         }
     }
 
     // ── Regular word ──────────────────────────────────────────────────────
     std::string value;
-    while (!atEnd() && isWordChar(peek()))
+    while (!AtEnd() && IsWordChar(Peek()))
     {
-        if (peek() == '\\' && m_pos + 1 < m_input.size())
+        if (Peek() == '\\' && m_pos_ + 1 < m_command_.size())
         {
-            char next = m_input[m_pos + 1];
+            char next = m_command_[m_pos_ + 1];
             if (next == '\n')
             {
-                advance(); // backslash
-                advance(); // newline — line continuation, discard both
-                skipWhitespace();
+                Advance(); // backslash
+                Advance(); // newline — line continuation, discard both
+                SkipWhitespace();
             }
             else
             {
-                advance();          // backslash
-                value += advance(); // escaped char taken literally
+                Advance();          // backslash
+                value += Advance(); // escaped char taken literally
             }
         }
         else
         {
-            value += advance();
+            value += Advance();
         }
     }
 
-    TokenType type = resolveKeyword(value);
-    return { type, value, -1, tokLine, tokCol };
+    TokenType type = ResolveKeyword(value);
+    return {.type = type, .value = value, .fd = -1, .line = tokLine, .col = tokCol};
 }
 
 // ─── Keyword resolution ───────────────────────────────────────────────────────
 
-TokenType Tokenizer::resolveKeyword(const std::string& word)
+TokenType Tokenizer::ResolveKeyword(const std::string& word)
 {
     static const std::unordered_map<std::string, TokenType> kw = {
-        { "if",       TokenType::If       },
-        { "then",     TokenType::Then     },
-        { "elif",     TokenType::Elif     },
-        { "else",     TokenType::Else     },
-        { "fi",       TokenType::Fi       },
-        { "while",    TokenType::While    },
-        { "until",    TokenType::Until    },
-        { "do",       TokenType::Do       },
-        { "done",     TokenType::Done     },
-        { "for",      TokenType::For      },
-        { "in",       TokenType::In       },
-        { "case",     TokenType::Case     },
-        { "esac",     TokenType::Esac     },
-        { "select",   TokenType::Select   },
-        { "function", TokenType::Function },
-        { "time",     TokenType::Time     },
+        {"if", TokenType::If},
+        {"then", TokenType::Then},
+        {"elif", TokenType::Elif},
+        {"else", TokenType::Else},
+        {"fi", TokenType::Fi},
+        {"while", TokenType::While},
+        {"until", TokenType::Until},
+        {"do", TokenType::Do},
+        {"done", TokenType::Done},
+        {"for", TokenType::For},
+        {"foreach", TokenType::Foreach},
+        {"end",     TokenType::End},
+        {"in", TokenType::In},
+        {"case", TokenType::Case},
+        {"esac", TokenType::Esac},
+        {"select", TokenType::Select},
+        {"function", TokenType::Function},
+        {"time", TokenType::Time},
     };
 
     auto it = kw.find(word);
@@ -201,152 +265,383 @@ TokenType Tokenizer::resolveKeyword(const std::string& word)
 
 // ─── Main tokenize loop ───────────────────────────────────────────────────────
 
-std::vector<Token> Tokenizer::tokenize()
+std::vector<Token> Tokenizer::Tokenize()
 {
     std::vector<Token> tokens;
 
-    while (!atEnd())
+    while (!AtEnd())
     {
-        skipWhitespace();
-        if (atEnd()) break;
+        SkipWhitespace();
+        if (AtEnd())
+            break;
 
-        int  tokLine = m_line;
-        int  tokCol  = m_col;
-        char c       = peek();
+        size_t tokLine = m_line_;
+        size_t tokCol = m_col_;
+        char chr = Peek();
 
         // ── Newline ───────────────────────────────────────────────────────
-        if (c == '\n')
+        if (chr == '\n')
         {
-            tokens.push_back({ TokenType::Newline, "", -1, tokLine, tokCol });
-            advance();
+            tokens.push_back({.type = TokenType::Newline,
+                              .value = "",
+                              .fd = -1,
+                              .line = tokLine,
+                              .col = tokCol});
+            Advance();
             continue;
         }
 
         // ── Comment ───────────────────────────────────────────────────────
-        if (c == '#')
+        if (chr == '#')
         {
-            while (!atEnd() && peek() != '\n')
-                advance();
+            while (!AtEnd() && Peek() != '\n')
+                Advance();
             continue;
         }
 
         // ── Operators — greedy longest-match ──────────────────────────────
 
-        if (c == '|')
+        if (chr == '|')
         {
-            advance();
-            if      (peek() == '|') { advance(); tokens.push_back({ TokenType::Or,       "||", -1, tokLine, tokCol }); }
-            else if (peek() == '&') { advance(); tokens.push_back({ TokenType::PipeBoth, "|&", -1, tokLine, tokCol }); }
-            else                    {            tokens.push_back({ TokenType::Pipe,      "|",  -1, tokLine, tokCol }); }
-            continue;
-        }
-
-        if (c == '&')
-        {
-            advance();
-            if (peek() == '&')
+            Advance();
+            if (Peek() == '|')
             {
-                advance();
-                tokens.push_back({ TokenType::And, "&&", -1, tokLine, tokCol });
+                Advance();
+                tokens.push_back({.type = TokenType::Or,
+                                  .value = "||",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
             }
-            else if (peek() == '>')
+            else if (Peek() == '&')
             {
-                advance();
-                if (peek() == '>') { advance(); tokens.push_back({ TokenType::RedirBothAppend, "&>>", -1, tokLine, tokCol }); }
-                else               {            tokens.push_back({ TokenType::RedirBoth,        "&>",  -1, tokLine, tokCol }); }
+                Advance();
+                tokens.push_back({.type = TokenType::PipeBoth,
+                                  .value = "|&",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
             }
             else
             {
-                tokens.push_back({ TokenType::Background, "&", -1, tokLine, tokCol });
+                tokens.push_back({.type = TokenType::Pipe,
+                                  .value = "|",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
             }
             continue;
         }
 
-        if (c == ';')
+        if (chr == '&')
         {
-            advance();
-            if (peek() == ';')
+            Advance();
+            if (Peek() == '&')
             {
-                advance();
-                if (peek() == '&') { advance(); tokens.push_back({ TokenType::DoubleSemiAmp, ";;&", -1, tokLine, tokCol }); }
-                else               {            tokens.push_back({ TokenType::DoubleSemi,     ";;",  -1, tokLine, tokCol }); }
+                Advance();
+                tokens.push_back({.type = TokenType::And,
+                                  .value = "&&",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
             }
-            else if (peek() == '&') { advance(); tokens.push_back({ TokenType::SemiAmp, ";&", -1, tokLine, tokCol }); }
-            else                    {            tokens.push_back({ TokenType::Semi,     ";",  -1, tokLine, tokCol }); }
-            continue;
-        }
-
-        if (c == '<')
-        {
-            advance();
-            if (peek() == '<')
+            else if (Peek() == '>')
             {
-                advance();
-                if      (peek() == '-') { advance(); tokens.push_back({ TokenType::HereDocDash,  "<<-", -1, tokLine, tokCol }); }
-                else if (peek() == '<') { advance(); tokens.push_back({ TokenType::HereString,   "<<<", -1, tokLine, tokCol }); }
-                else                    {            tokens.push_back({ TokenType::HereDoc,      "<<",  -1, tokLine, tokCol }); }
+                Advance();
+                if (Peek() == '>')
+                {
+                    Advance();
+                    tokens.push_back({.type = TokenType::RedirBothAppend,
+                                      .value = "&>>",
+                                      .fd = -1,
+                                      .line = tokLine,
+                                      .col = tokCol});
+                }
+                else
+                {
+                    tokens.push_back({.type = TokenType::RedirBoth,
+                                      .value = "&>",
+                                      .fd = -1,
+                                      .line = tokLine,
+                                      .col = tokCol});
+                }
             }
-            else if (peek() == '&') { advance(); tokens.push_back({ TokenType::DupIn,        "<&", -1, tokLine, tokCol }); }
-            else if (peek() == '>') { advance(); tokens.push_back({ TokenType::RedirReadWrite,"<>", -1, tokLine, tokCol }); }
-            else                    {            tokens.push_back({ TokenType::RedirIn,       "<",  -1, tokLine, tokCol }); }
+            else
+            {
+                tokens.push_back({.type = TokenType::Background,
+                                  .value = "&",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
             continue;
         }
 
-        if (c == '>')
+        if (chr == ';')
         {
-            advance();
-            if      (peek() == '>') { advance(); tokens.push_back({ TokenType::RedirAppend,  ">>", -1, tokLine, tokCol }); }
-            else if (peek() == '&') { advance(); tokens.push_back({ TokenType::DupOut,       ">&", -1, tokLine, tokCol }); }
-            else if (peek() == '|') { advance(); tokens.push_back({ TokenType::RedirClobber, ">|", -1, tokLine, tokCol }); }
-            else                    {            tokens.push_back({ TokenType::RedirOut,      ">",  -1, tokLine, tokCol }); }
+            Advance();
+            if (Peek() == ';')
+            {
+                Advance();
+                if (Peek() == '&')
+                {
+                    Advance();
+                    tokens.push_back({.type = TokenType::DoubleSemiAmp,
+                                      .value = ";;&",
+                                      .fd = -1,
+                                      .line = tokLine,
+                                      .col = tokCol});
+                }
+                else
+                {
+                    tokens.push_back({.type = TokenType::DoubleSemi,
+                                      .value = ";;",
+                                      .fd = -1,
+                                      .line = tokLine,
+                                      .col = tokCol});
+                }
+            }
+            else if (Peek() == '&')
+            {
+                Advance();
+                tokens.push_back({.type = TokenType::SemiAmp,
+                                  .value = ";&",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            else
+            {
+                tokens.push_back({.type = TokenType::Semi,
+                                  .value = ";",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
             continue;
         }
 
-        if (c == '(')
+        if (chr == '<')
         {
-            advance();
-            if (peek() == '(') { advance(); tokens.push_back({ TokenType::DLParen, "((", -1, tokLine, tokCol }); }
-            else               {            tokens.push_back({ TokenType::LParen,  "(",  -1, tokLine, tokCol }); }
+            Advance();
+            if (Peek() == '<')
+            {
+                Advance();
+                if (Peek() == '-')
+                {
+                    Advance();
+                    tokens.push_back({.type = TokenType::HereDocDash,
+                                      .value = "<<-",
+                                      .fd = -1,
+                                      .line = tokLine,
+                                      .col = tokCol});
+                }
+                else if (Peek() == '<')
+                {
+                    Advance();
+                    tokens.push_back({.type = TokenType::HereString,
+                                      .value = "<<<",
+                                      .fd = -1,
+                                      .line = tokLine,
+                                      .col = tokCol});
+                }
+                else
+                {
+                    tokens.push_back({.type = TokenType::HereDoc,
+                                      .value = "<<",
+                                      .fd = -1,
+                                      .line = tokLine,
+                                      .col = tokCol});
+                }
+            }
+            else if (Peek() == '&')
+            {
+                Advance();
+                tokens.push_back({.type = TokenType::DupIn,
+                                  .value = "<&",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            else if (Peek() == '>')
+            {
+                Advance();
+                tokens.push_back({.type = TokenType::RedirReadWrite,
+                                  .value = "<>",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            else
+            {
+                tokens.push_back({.type = TokenType::RedirIn,
+                                  .value = "<",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
             continue;
         }
 
-        if (c == ')')
+        if (chr == '>')
         {
-            advance();
-            if (peek() == ')') { advance(); tokens.push_back({ TokenType::DRParen, "))", -1, tokLine, tokCol }); }
-            else               {            tokens.push_back({ TokenType::RParen,  ")",  -1, tokLine, tokCol }); }
+            Advance();
+            if (Peek() == '>')
+            {
+                Advance();
+                tokens.push_back({.type = TokenType::RedirAppend,
+                                  .value = ">>",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            else if (Peek() == '&')
+            {
+                Advance();
+                tokens.push_back({.type = TokenType::DupOut,
+                                  .value = ">&",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            else if (Peek() == '|')
+            {
+                Advance();
+                tokens.push_back({.type = TokenType::RedirClobber,
+                                  .value = ">|",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            else
+            {
+                tokens.push_back({.type = TokenType::RedirOut,
+                                  .value = ">",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
             continue;
         }
 
-        if (c == '{') { advance(); tokens.push_back({ TokenType::LBrace, "{", -1, tokLine, tokCol }); continue; }
-        if (c == '}') { advance(); tokens.push_back({ TokenType::RBrace, "}", -1, tokLine, tokCol }); continue; }
+        if (chr == '(')
+        {
+            Advance();
+            if (Peek() == '(')
+            {
+                Advance();
+                tokens.push_back({.type = TokenType::DLParen,
+                                  .value = "((",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            else
+            {
+                tokens.push_back({.type = TokenType::LParen,
+                                  .value = "(",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            continue;
+        }
+
+        if (chr == ')')
+        {
+            Advance();
+            if (Peek() == ')')
+            {
+                Advance();
+                tokens.push_back({.type = TokenType::DRParen,
+                                  .value = "))",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            else
+            {
+                tokens.push_back({.type = TokenType::RParen,
+                                  .value = ")",
+                                  .fd = -1,
+                                  .line = tokLine,
+                                  .col = tokCol});
+            }
+            continue;
+        }
+
+        if (chr == '{')
+        {
+            Advance();
+            tokens.push_back({.type = TokenType::LBrace,
+                              .value = "{",
+                              .fd = -1,
+                              .line = tokLine,
+                              .col = tokCol});
+            continue;
+        }
+        if (chr == '}')
+        {
+            Advance();
+            tokens.push_back({.type = TokenType::RBrace,
+                              .value = "}",
+                              .fd = -1,
+                              .line = tokLine,
+                              .col = tokCol});
+            continue;
+        }
 
         // ── [[ and ]] ─────────────────────────────────────────────────────
-        if (c == '[' && peek(1) == '[')
+        if (chr == '[' && Peek(1) == '[')
         {
-            advance(); advance();
-            tokens.push_back({ TokenType::DLBracket, "[[", -1, tokLine, tokCol });
+            Advance();
+            Advance();
+            tokens.push_back({.type = TokenType::DLBracket,
+                              .value = "[[",
+                              .fd = -1,
+                              .line = tokLine,
+                              .col = tokCol});
             continue;
         }
-        if (c == ']' && peek(1) == ']')
+        if (chr == ']' && Peek(1) == ']')
         {
-            advance(); advance();
-            tokens.push_back({ TokenType::DRBracket, "]]", -1, tokLine, tokCol });
+            Advance();
+            Advance();
+            tokens.push_back({.type = TokenType::DRBracket,
+                              .value = "]]",
+                              .fd = -1,
+                              .line = tokLine,
+                              .col = tokCol});
             continue;
         }
 
         // ── ! ─────────────────────────────────────────────────────────────
-        if (c == '!') { advance(); tokens.push_back({ TokenType::Bang, "!", -1, tokLine, tokCol }); continue; }
+        if (chr == '!')
+        {
+            Advance();
+            tokens.push_back(
+                {.type = TokenType::Bang, .value = "!", .fd = -1, .line = tokLine, .col = tokCol});
+            continue;
+        }
 
         // ── Quoted strings ────────────────────────────────────────────────
-        if (c == '\'') { tokens.push_back(readSingleQuoted()); continue; }
-        if (c == '"')  { tokens.push_back(readDoubleQuoted()); continue; }
+        if (chr == '\'')
+        {
+            tokens.push_back(ReadSingleQuoted());
+            continue;
+        }
+        if (chr == '"')
+        {
+            tokens.push_back(ReadDoubleQuoted());
+            continue;
+        }
 
         // ── Word (includes fd-prefixed redirects) ─────────────────────────
-        tokens.push_back(readWord());
+        tokens.push_back(ReadWord());
     }
 
-    tokens.push_back({ TokenType::Eof, "", -1, m_line, m_col });
+    tokens.push_back(
+        {.type = TokenType::Eof, .value = "", .fd = -1, .line = m_line_, .col = m_col_});
     return tokens;
 }
 
