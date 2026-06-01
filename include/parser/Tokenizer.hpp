@@ -13,7 +13,7 @@ class Tokenizer
 {
 public:
     Tokenizer(const std::string& command);
-    ~Tokenizer();
+    ~Tokenizer() = default;
     Tokenizer(const Tokenizer&) = delete;
     Tokenizer& operator=(const Tokenizer&) = delete;
     Tokenizer(Tokenizer&&) = delete;

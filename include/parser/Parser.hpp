@@ -36,7 +36,14 @@ private:
     [[nodiscard]]
     bool IsAssignment(const std::string&) const;
 
+    [[nodiscard]]
+    bool IsListTerminator(TokenType type) const;
+
+    [[nodiscard]]
+    bool IsWordLike(TokenType type) const;
+
     std::unique_ptr<ast::AstNode> ParseList();
+    std::unique_ptr<ast::AstNode> ExpectList(const char* context);
     std::unique_ptr<ast::AstNode> ParseAndOr();
     std::unique_ptr<ast::AstNode> ParsePipeline();
     std::unique_ptr<ast::AstNode> ParseCommand();
