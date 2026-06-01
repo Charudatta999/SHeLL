@@ -9,7 +9,7 @@ BasedOnStyle: LLVM
 Standard: Latest
 
 # --- Line Limits & Indentation ---
-ColumnLimit: 100
+ColumnLimit: 70
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
@@ -48,13 +48,18 @@ AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 BinPackArguments: false
-BinPackParameters: OnePerLine
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
 
 # --- Classes & Constructors ---
 AccessModifierOffset: -4
 EmptyLineBeforeAccessModifier: LogicalBlock
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
-BreakConstructorInitializersBeforeComma: true
+BreakConstructorInitializers: BeforeComma
+PackConstructorInitializers: CurrentLine
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
 
 # --- Includes & Comments ---
 SortIncludes:
