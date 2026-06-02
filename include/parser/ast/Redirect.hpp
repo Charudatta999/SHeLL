@@ -1,8 +1,6 @@
 #ifndef PARSER_AST_REDIRECT_HPP
 #define PARSER_AST_REDIRECT_HPP
 
-#include "parser/Parser.hpp"
-#include "parser/Token.hpp"
 #include <string>
 namespace parser::ast
 {

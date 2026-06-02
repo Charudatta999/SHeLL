@@ -39,6 +39,8 @@ public:
         return m_body_;
     }
 
+    std::unique_ptr<AstNode> ReleaseBody() { return std::move(m_body_); }
+
 private:
     std::string m_name_;
     std::unique_ptr<AstNode> m_body_;
