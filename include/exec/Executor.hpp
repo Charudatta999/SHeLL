@@ -2,42 +2,55 @@
 #define EXEC_EXECUTOR_HPP
 
 #include "exec/ExecHelpers.hpp"
+#include "parser/ast/AstVisitor.hpp"
 
 #include <memory>
 #include <string>
 #include <vector>
 
-namespace builtin
+namespace builtins
 {
-    class BuiltinDispatcher;
+class BuiltinDispatcher;
 }
+
 namespace shell
 {
-    class ShellState;
+class ShellState;
 }
+
+namespace parser::ast
+{
+class AstNode;
+}
+
 namespace exec
 {
-class Executor
+class Executor : public parser::ast::AstVisitor
 {
 public:
-    explicit Executor( std::unique_ptr<shell::ShellState>& state, std::unique_ptr<builtin::BuiltinDispatcher>& builtins);
+    explicit Executor(std::unique_ptr<shell::ShellState>& state,
+                      std::unique_ptr<builtins ::BuiltinDispatcher>& builtins);
 
-    int Run(const parser::AstNode& root);
+    int Run(parser::ast::AstNode& root);
 
 private:
-    int Exec(const parser::AstNode& n); // dynamic_cast dispatch
-    int ExecList(const parser::ListNode&);
-    int ExecAndOr(const parser::AndOrNode&);
-    int ExecPipeline(const parser::PipelineNode&);
-    int ExecSimple(const parser::SimpleCommand&);
+    void Visit(parser::ast::SimpleCommand&) override;
+    void Visit(parser::ast::Pipeline&) override;
+    void Visit(parser::ast::List&) override;
+    void Visit(parser::ast::AndOr&) override;
+    void Visit(parser::ast::Subshell&) override;
+    void Visit(parser::ast::Group&) override;
+    void Visit(parser::ast::Function&) override;
+    void Visit(parser::ast::While&) override;
+    void Visit(parser::ast::For&) override;
+    void Visit(parser::ast::If&) override;
+    void Visit(parser::ast::Case&) override;
 
     [[nodiscard]]
-    CommandSpec BuildSpec(const parser::SimpleCommand&) const; // expand + env
-    [[nodiscard]]
-    std::vector<std::string> Expand(const std::vector<std::string>&) const;
-
+    CommandSpec BuildSpec(const parser::ast::SimpleCommand&) const;
     std::unique_ptr<shell::ShellState>& m_state_;
-    std::unique_ptr<builtin::BuiltinDispatcher>& m_builtins_;
+    std::unique_ptr<builtins ::BuiltinDispatcher>& m_builtins_;
+    int m_status_ = 0;
 };
 } // namespace exec
 #endif // EXEC_EXECUTOR_HPP

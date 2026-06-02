@@ -26,7 +26,7 @@ public:
     Pipeline(Pipeline&& pipeline) = delete;
     Pipeline& operator= (Pipeline&& pipeline) = delete;
 
-    int Run(const std::vector<const CommandSpec&> pipeline, bool pipefail = false);
+    int Run(const std::vector<CommandSpec>& pipeline, bool pipefail = false);
 private:
     std::unique_ptr<io::Pipe> CreatePipe();
 }; // class exec

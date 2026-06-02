@@ -114,6 +114,7 @@ add_library(shell_core STATIC
     src/exec/Pipeline.cpp
     src/exec/Redirection.cpp
     src/exec/WaitStatus.cpp
+    src/exec/ForkRunner.cpp
 
     # --- Builtins ---
     src/builtins/BuiltinDispatcher.cpp
