@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-test:
+    name: Build & test (OEL 8)
+    runs-on: ubuntu-latest
+    container:
+      image: oraclelinux:8
+
+    steps:
+      - name: Install toolchain & deps
+        run: |
+          # devtoolset-13 gives a C++20-capable GCC; base OEL 8 gcc is too old.
+          dnf -y install oracle-epel-release-el8 || dnf -y install epel-release
+          dnf -y install \
+            gcc-toolset-13 \
+            gcc-toolset-13-gcc-c++ \
+            cmake \
+            make \
+            git \
+            gtest-devel \
+            gmock-devel
+          # rapidjson (header-only) — MCP is disabled in CI, but configure is happier with it present
+          dnf -y install rapidjson-devel || true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          source /opt/rh/gcc-toolset-13/enable
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON \
+            -DBUILD_MCP=OFF \
+            -DENABLE_SANITIZERS=OFF
+
+      - name: Build core + tests
+        run: |
+          source /opt/rh/gcc-toolset-13/enable
+          cmake --build build --target shell_tests -j"$(nproc)"
+
+      - name: Run tests
+        run: |
+          source /opt/rh/gcc-toolset-13/enable
+          ctest --test-dir build --output-on-failure

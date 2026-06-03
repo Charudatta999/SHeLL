@@ -10,6 +10,11 @@ add_executable(shell_tests
     unit/io/PipeTest.cpp
     unit/parser/TokenTest.cpp
     unit/parser/ParserTest.cpp
+    unit/parser/AstPrinterTest.cpp
+    unit/shell/ShellStateTest.cpp
+    unit/exec/CommandSpecTest.cpp
+    unit/exec/ForkRunnerTest.cpp
+    unit/exec/ExecutorTest.cpp
 )
 
 # Include the main project headers

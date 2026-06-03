@@ -30,6 +30,12 @@ Executor::Executor(std::unique_ptr<shell::ShellState>& state,
 {
 }
 
+int Executor::Run(parser::ast::AstNode& root)
+{
+    root.Accept(*this);
+    return m_status_;
+}
+
 CommandSpec Executor::BuildSpec(const parser::ast::SimpleCommand& command) const
 {
     return CommandSpec(command.Argv(), command.Redirects(), command.Assignments());

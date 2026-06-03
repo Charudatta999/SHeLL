@@ -18,7 +18,7 @@ class Pipeline
 
 public:
     Pipeline();
-    ~Pipeline();
+    ~Pipeline() = default;
 
     // Non-Copyable & Non-Moveable
     Pipeline(const Pipeline& pipeline) = delete;
