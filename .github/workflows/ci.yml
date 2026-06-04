@@ -48,6 +48,7 @@ jobs:
           source /opt/rh/gcc-toolset-13/enable
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_GUI=OFF \
             -DBUILD_TESTING=ON \
             -DBUILD_MCP=OFF \
             -DENABLE_SANITIZERS=OFF
