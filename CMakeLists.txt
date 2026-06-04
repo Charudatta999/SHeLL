@@ -102,6 +102,7 @@ set(SHELL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include")
 add_library(shell_core STATIC
     # --- Shell Core ---
     src/shell/ShellState.cpp
+    src/shell/ShellException.cpp
     src/shell/Repl.cpp
     src/shell/Prompt.cpp
 
