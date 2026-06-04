@@ -23,11 +23,22 @@ jobs:
             gcc-toolset-13-gcc-c++ \
             cmake \
             make \
-            git \
-            gtest-devel \
-            gmock-devel
+            git
           # rapidjson (header-only) — MCP is disabled in CI, but configure is happier with it present
           dnf -y install rapidjson-devel || true
+
+      - name: Install GoogleTest + GMock from source
+        run: |
+          # EL8 has no gtest-devel/gmock-devel package, so build & install it.
+          source /opt/rh/gcc-toolset-13/enable
+          git clone --depth 1 --branch v1.17.0 \
+            https://github.com/google/googletest.git /tmp/googletest
+          cmake -S /tmp/googletest -B /tmp/googletest/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_GMOCK=ON \
+            -DCMAKE_INSTALL_PREFIX=/usr/local
+          cmake --build /tmp/googletest/build -j"$(nproc)"
+          cmake --install /tmp/googletest/build
 
       - name: Checkout
         uses: actions/checkout@v4
