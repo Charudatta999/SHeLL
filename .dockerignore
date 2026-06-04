@@ -1,0 +1,7 @@
+build
+build-*
+out
+.git
+.cache
+**/__pycache__
+tools/todo-dashboard

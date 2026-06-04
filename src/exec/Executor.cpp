@@ -14,7 +14,7 @@
 #include "parser/ast/commands/List.hpp"
 #include "parser/ast/commands/Pipeline.hpp"
 #include "parser/ast/commands/SimpleCommand.hpp"
-#include "parser/ast/commands/SubShell.hpp"
+#include "parser/ast/commands/Subshell.hpp"
 #include "parser/ast/commands/While.hpp"
 #include "shell/ShellState.hpp"
 

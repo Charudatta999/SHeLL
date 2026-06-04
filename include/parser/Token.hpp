@@ -18,7 +18,7 @@ enum class TokenType
     // ── Words ─────────────────────────────────────────────────────────────
     Word,         // unquoted word: command name, argument, filename
     SingleQuoted, // '...' — literal, no expansion
-    DoubleQuoted, // "..." — allows $, ``, \
+    DoubleQuoted, // "..." — allows $, backticks, backslash escapes
 
     // ── Pipe family ───────────────────────────────────────────────────────
     Pipe,     // |    stdout of lhs → stdin of rhs

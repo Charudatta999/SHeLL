@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [master]
 
+env:
+  CC: clang
+  CXX: clang++
+
 jobs:
   build-and-test:
-    name: Build & test (OEL 8)
+    name: Build & test (OEL 8, clang)
     runs-on: ubuntu-latest
     container:
       image: oraclelinux:8
@@ -16,11 +20,11 @@ jobs:
     steps:
       - name: Install toolchain & deps
         run: |
-          # devtoolset-13 gives a C++20-capable GCC; base OEL 8 gcc is too old.
           dnf -y install oracle-epel-release-el8 || dnf -y install epel-release
+          # llvm-toolset gives a C++20-capable clang; base OEL 8 clang is too old.
           dnf -y install \
-            gcc-toolset-13 \
-            gcc-toolset-13-gcc-c++ \
+            llvm-toolset \
+            clang \
             cmake \
             make \
             git
@@ -30,7 +34,6 @@ jobs:
       - name: Install GoogleTest + GMock from source
         run: |
           # EL8 has no gtest-devel/gmock-devel package, so build & install it.
-          source /opt/rh/gcc-toolset-13/enable
           git clone --depth 1 --branch v1.17.0 \
             https://github.com/google/googletest.git /tmp/googletest
           cmake -S /tmp/googletest -B /tmp/googletest/build \
@@ -45,7 +48,6 @@ jobs:
 
       - name: Configure
         run: |
-          source /opt/rh/gcc-toolset-13/enable
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_GUI=OFF \
@@ -54,11 +56,7 @@ jobs:
             -DENABLE_SANITIZERS=OFF
 
       - name: Build core + tests
-        run: |
-          source /opt/rh/gcc-toolset-13/enable
-          cmake --build build --target shell_tests -j"$(nproc)"
+        run: cmake --build build --target shell_tests -j"$(nproc)"
 
       - name: Run tests
-        run: |
-          source /opt/rh/gcc-toolset-13/enable
-          ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure
