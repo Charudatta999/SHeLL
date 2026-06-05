@@ -68,6 +68,12 @@ vcpkg_installed/
 Testing/
 .cache/
 
+# local scratch / debug dumps
+repo_structure.txt
+test_commands
+test_result.txt
+test_results.txt
+
 #thirdparty
 third_party/rapidjson/**
 third_party/rapidjson/**

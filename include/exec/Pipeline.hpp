@@ -18,7 +18,7 @@ class Pipeline
 
 public:
     Pipeline();
-    ~Pipeline();
+    ~Pipeline() = default;
 
     // Non-Copyable & Non-Moveable
     Pipeline(const Pipeline& pipeline) = delete;
@@ -26,7 +26,7 @@ public:
     Pipeline(Pipeline&& pipeline) = delete;
     Pipeline& operator= (Pipeline&& pipeline) = delete;
 
-    int Run(const std::vector<const CommandSpec&> pipeline, bool pipefail = false);
+    int Run(const std::vector<CommandSpec>& pipeline, bool pipefail = false);
 private:
     std::unique_ptr<io::Pipe> CreatePipe();
 }; // class exec

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CC: clang
+  CXX: clang++
+
+jobs:
+  build-and-test:
+    name: Build & test (OEL 8, clang)
+    runs-on: ubuntu-latest
+    container:
+      image: oraclelinux:8
+
+    steps:
+      - name: Install toolchain & deps
+        run: |
+          dnf -y install oracle-epel-release-el8 || dnf -y install epel-release
+          # llvm-toolset gives a C++20-capable clang; base OEL 8 clang is too old.
+          dnf -y install \
+            llvm-toolset \
+            clang \
+            cmake \
+            make \
+            git
+          # rapidjson (header-only) — MCP is disabled in CI, but configure is happier with it present
+          dnf -y install rapidjson-devel || true
+
+      - name: Install GoogleTest + GMock from source
+        run: |
+          # EL8 has no gtest-devel/gmock-devel package, so build & install it.
+          git clone --depth 1 --branch v1.17.0 \
+            https://github.com/google/googletest.git /tmp/googletest
+          cmake -S /tmp/googletest -B /tmp/googletest/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_GMOCK=ON \
+            -DCMAKE_INSTALL_PREFIX=/usr/local
+          cmake --build /tmp/googletest/build -j"$(nproc)"
+          cmake --install /tmp/googletest/build
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_GUI=OFF \
+            -DBUILD_TESTING=ON \
+            -DBUILD_MCP=OFF \
+            -DENABLE_SANITIZERS=OFF
+
+      - name: Build core + tests
+        run: cmake --build build --target shell_tests -j"$(nproc)"
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure

@@ -5,11 +5,12 @@
 
 #include <memory>
 #include <unordered_map>
-namespace builtin
+
+namespace builtins
 {
 
-
-using BuiltinFn = int(*)(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
+using BuiltinFn = int (*)(const std::vector<std::string>& argv,
+                          std::unique_ptr<BuiltinContext>& ctx);
 
 class BuiltinDispatcher
 {
@@ -23,5 +24,5 @@ public:
 private:
     std::unordered_map<std::string, BuiltinFn> m_table_;
 };
-} // namespace
+} // namespace builtins
 #endif // BUILTINS_BUILTIN_DISPATCHER

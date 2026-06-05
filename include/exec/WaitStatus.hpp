@@ -10,7 +10,7 @@ class WaitStatus
 {
 
 public:
-    explicit WaitStatus(pid_t pid);
+    explicit WaitStatus(pid_t pid, bool background = false);
     ~WaitStatus() = default;
 
     // Non-Moveable & Non-Copyable
@@ -35,9 +35,17 @@ public:
     [[nodiscard]]
     bool IsValid() const;
 
+    [[nodiscard]]
+    bool IsRunning() const;
+
+    [[nodiscard]]
+    bool IsBackground() const;
+
 private:
     pid_t m_pid_;
     int m_status_;
+    bool m_background_;
+    bool m_running_;
 }; // class WaitStatus
 } // namespace exec
 #endif

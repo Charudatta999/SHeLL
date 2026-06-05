@@ -36,7 +36,7 @@ std::unique_ptr<io::Pipe> Pipeline::CreatePipe()
     }
 }
 
-int Pipeline::Run(const std::vector<const CommandSpec&> pipeline, bool pipefail)
+int Pipeline::Run(const std::vector<CommandSpec>& pipeline, bool pipefail)
 {
     std::vector<std::unique_ptr<io::Pipe>> pipeVector;
     const size_t pipeSize = pipeline.size();
@@ -59,7 +59,7 @@ int Pipeline::Run(const std::vector<const CommandSpec&> pipeline, bool pipefail)
     if (pipeSize == 1)
     {
         Process p;
-        p.Start(pipeline[0], nullptr, nullptr);
+        p.Start(pipeline[0], nullptr, nullptr,0);
         WaitStatus s(p.GetPid());
         if (s.Signaled()) return s.GetSignal();
         if (s.Exited()) return s.ExitCode();
@@ -70,16 +70,18 @@ int Pipeline::Run(const std::vector<const CommandSpec&> pipeline, bool pipefail)
         processVector[i] = std::make_unique<Process>();
         if (i == 0)
         {
-            processVector[i]->Start(pipeline[i], nullptr, pipeVector[i]->GetWritePipeFD());
+            processVector[i]->Start(pipeline[i], nullptr, pipeVector[i]->GetWritePipeFD(),0);
         }
         else if (i > 0 && i < pipeSize - 1)
         {
+            auto pgid = processVector[0]->GetPid();
             processVector[i]->Start(
-                pipeline[i], pipeVector[i - 1]->GetReadPipeFD(), pipeVector[i]->GetWritePipeFD());
+                pipeline[i], pipeVector[i - 1]->GetReadPipeFD(), pipeVector[i]->GetWritePipeFD(), pgid);
         }
         else if (i == pipeSize - 1)
         {
-            processVector[i]->Start(pipeline[i], pipeVector[i - 1]->GetReadPipeFD(), nullptr);
+            auto pgid = processVector[0]->GetPid();
+            processVector[i]->Start(pipeline[i], pipeVector[i - 1]->GetReadPipeFD(), nullptr,pgid);
         }
     }
     for (auto& pipe : pipeVector)

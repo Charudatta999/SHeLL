@@ -1,12 +1,13 @@
 #include "exec/Process.hpp"
 #include "exec/ExecHelpers.hpp"
+#include "exec/Redirection.hpp"
 
 #include "io/FdOps.hpp"
 #include "io/FileDescriptor.hpp"
 
 #include <cstdio>
-#include <string>
 #include <unistd.h>
+#include<vector>
 
 namespace
 {
@@ -37,16 +38,7 @@ bool Process::Start(const CommandSpec& spec,
 
     if (m_pid_ == 0)
     {
-
-        if (pgid == 0)
-        {
-            setpgid(0, 0);
-        }
-        else
-        {
-            setpgid(0, pgid);
-        }
-
+        setpgid(0, pgid);
         if (readFD != nullptr)
         {
             io::fdops::Dup2(*readFD, stdinFD);
@@ -54,6 +46,11 @@ bool Process::Start(const CommandSpec& spec,
         if (writeFD != nullptr)
         {
             io::fdops::Dup2(*writeFD, stdOutFD);
+        }
+        for (const auto& redir : spec.redirects)
+        {
+            if (!exec::ApplyRedirect(redir))
+                _exit(EXIT_FAILURE);
         }
         std::vector<char*> argv;
 

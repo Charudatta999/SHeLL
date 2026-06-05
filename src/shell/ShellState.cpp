@@ -1,5 +1,6 @@
 #include "shell/ShellState.hpp"
 
+#include "parser/ast/commands/Function.hpp"
 #include "shell/ShellException.hpp"
 #include "utils/ErrorCodes.hpp"
 
@@ -76,11 +77,10 @@ void ShellState::SetVar(const std::string& name, const std::string& value) noexc
     {
         m_vars_[name] = value;
     }
-    catch(const std::bad_alloc&)
+    catch (const std::bad_alloc&)
     {
         // todo log when logger is intergrated
     }
-
 }
 
 void ShellState::UnSetVar(const std::string& varName) noexcept
@@ -101,7 +101,7 @@ void ShellState::ExportVar(const std::string& varName) noexcept
     {
         m_exportedVars_.insert(varName);
     }
-    catch(const std::bad_alloc&)
+    catch (const std::bad_alloc&)
     {
         // todo log when logger is intergrated
     }
@@ -139,19 +139,21 @@ void ShellState::SetLastExitCode(int code) noexcept
 
 // ── Functions ────────────────────────────────────────────────────────────────
 
-void ShellState::AddFunction(parser::FunctionNode function)
+void ShellState::AddFunction(const std::string& name, std::unique_ptr<parser::ast::AstNode> body)
 {
-    m_functions_.emplace(function.name, std::move(function));
+    m_functions_.emplace(name, std::move(body));
 }
 
-const std::unique_ptr<parser::AstNode>&
-ShellState::GetFunctionBody(const std::string& functionName) const
+parser::ast::AstNode* ShellState::GetFunctionBody(const std::string& functionName)
 {
     try
     {
-
-        const auto& funcBody = m_functions_.at(functionName);
-        return funcBody.body;
+        auto it = m_functions_.find(functionName);
+        if (it == m_functions_.end())
+        {
+            return nullptr;
+        }
+        return it->second.get();
     }
     catch (const std::out_of_range&)
     {
