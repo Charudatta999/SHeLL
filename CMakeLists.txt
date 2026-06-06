@@ -40,34 +40,42 @@ list(PREPEND CMAKE_PREFIX_PATH "${THIRD_PARTY_INSTALL_DIR}")
 # Prepend pkg-config path so pkg_check_modules finds our local .pc files first
 set(ENV{PKG_CONFIG_PATH} "${THIRD_PARTY_INSTALL_DIR}/lib/pkgconfig:${THIRD_PARTY_INSTALL_DIR}/share/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 
+# ─── Build options ───────────────────────────────────────
+# GUI deps (SDL2/OpenGL/FreeType/HarfBuzz/vterm) are vendored in third_party/
+# and not available on minimal CI images. Turn OFF to build only the shell
+# backend (shell_core) + tests.
+option(BUILD_GUI "Build the GUI terminal (SDL2/OpenGL/FreeType/HarfBuzz/vterm)" ON)
+
 # ─── Find Dependencies ───────────────────────────────────
-# SDL2 — windowing, input, OpenGL context (X11 + Wayland)
-find_package(SDL2 REQUIRED)
+if(BUILD_GUI)
+    # SDL2 — windowing, input, OpenGL context (X11 + Wayland)
+    find_package(SDL2 REQUIRED)
 
-# OpenGL — GPU rendering (Headers provided by Glad)
-# find_package(OpenGL REQUIRED)
+    # OpenGL — GPU rendering (Headers provided by Glad)
+    # find_package(OpenGL REQUIRED)
 
-# FreeType — font rasterization
-find_package(Freetype REQUIRED)
+    # FreeType — font rasterization
+    find_package(Freetype REQUIRED)
 
-# HarfBuzz — complex text shaping
-# Use pkg-config explicitly because the generated CMake config is broken when built locally
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
+    # HarfBuzz — complex text shaping
+    # Use pkg-config explicitly because the generated CMake config is broken when built locally
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
 
-# libvterm — terminal escape sequence state machine
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-    pkg_check_modules(VTERM QUIET IMPORTED_TARGET vterm)
-endif()
-# If not found via pkg-config, try manual detection
-if(NOT VTERM_FOUND)
-    find_library(VTERM_LIBRARIES NAMES vterm)
-    find_path(VTERM_INCLUDE_DIRS NAMES vterm.h PATH_SUFFIXES vterm)
-    if(VTERM_LIBRARIES AND VTERM_INCLUDE_DIRS)
-        set(VTERM_FOUND TRUE)
-    else()
-        message(WARNING "libvterm not found — terminal emulator will not build. Install via: vcpkg install libvterm")
+    # libvterm — terminal escape sequence state machine
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(VTERM QUIET IMPORTED_TARGET vterm)
+    endif()
+    # If not found via pkg-config, try manual detection
+    if(NOT VTERM_FOUND)
+        find_library(VTERM_LIBRARIES NAMES vterm)
+        find_path(VTERM_INCLUDE_DIRS NAMES vterm.h PATH_SUFFIXES vterm)
+        if(VTERM_LIBRARIES AND VTERM_INCLUDE_DIRS)
+            set(VTERM_FOUND TRUE)
+        else()
+            message(WARNING "libvterm not found — terminal emulator will not build. Install via: vcpkg install libvterm")
+        endif()
     endif()
 endif()
 
@@ -94,6 +102,7 @@ set(SHELL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include")
 add_library(shell_core STATIC
     # --- Shell Core ---
     src/shell/ShellState.cpp
+    src/shell/ShellException.cpp
     src/shell/Repl.cpp
     src/shell/Prompt.cpp
 
@@ -114,6 +123,7 @@ add_library(shell_core STATIC
     src/exec/Pipeline.cpp
     src/exec/Redirection.cpp
     src/exec/WaitStatus.cpp
+    src/exec/ForkRunner.cpp
 
     # --- Builtins ---
     src/builtins/BuiltinDispatcher.cpp
@@ -185,68 +195,70 @@ endif()
 #   - SDL2 software renderer (CPU-only fallback)
 # Both implement the IRenderer interface.
 
-add_library(renderer_core STATIC
-    # --- GPU backend (OpenGL 3.3) ---
-    src/renderer/GlRenderer.cpp
-    src/renderer/GlyphAtlas.cpp
-    src/renderer/CellRenderer.cpp
-    src/renderer/Shader.cpp
-    src/renderer/Cursor.cpp
+if(BUILD_GUI)
+    add_library(renderer_core STATIC
+        # --- GPU backend (OpenGL 3.3) ---
+        src/renderer/GlRenderer.cpp
+        src/renderer/GlyphAtlas.cpp
+        src/renderer/CellRenderer.cpp
+        src/renderer/Shader.cpp
+        src/renderer/Cursor.cpp
 
-    # --- CPU backend (SDL2 software fallback) ---
-    src/renderer/SwRenderer.cpp
+        # --- CPU backend (SDL2 software fallback) ---
+        src/renderer/SwRenderer.cpp
 
-    # --- OpenGL Loader (Glad) ---
-    third_party/src/glad/gl.c
-)
+        # --- OpenGL Loader (Glad) ---
+        third_party/src/glad/gl.c
+    )
 
-target_include_directories(renderer_core
-    PUBLIC ${SHELL_INCLUDE_DIR}
-    PRIVATE
-        ${FREETYPE_INCLUDE_DIRS}
-        ${CMAKE_SOURCE_DIR}/third_party/include
-)
+    target_include_directories(renderer_core
+        PUBLIC ${SHELL_INCLUDE_DIR}
+        PRIVATE
+            ${FREETYPE_INCLUDE_DIRS}
+            ${CMAKE_SOURCE_DIR}/third_party/include
+    )
 
-target_link_libraries(renderer_core
-    PRIVATE
-        Freetype::Freetype
-        ${CMAKE_DL_LIBS}
-)
+    target_link_libraries(renderer_core
+        PRIVATE
+            Freetype::Freetype
+            ${CMAKE_DL_LIBS}
+    )
 
-# Link HarfBuzz (imported via pkg-config)
-target_link_libraries(renderer_core PRIVATE PkgConfig::HARFBUZZ)
+    # Link HarfBuzz (imported via pkg-config)
+    target_link_libraries(renderer_core PRIVATE PkgConfig::HARFBUZZ)
 
-target_set_warnings(renderer_core)
-target_enable_sanitizers(renderer_core)
+    target_set_warnings(renderer_core)
+    target_enable_sanitizers(renderer_core)
 
-# ═════════════════════════════════════════════════════════
-# Main Executable (shell)
-# ═════════════════════════════════════════════════════════
-# SDL2 window + event loop → wires everything together.
+    # ═════════════════════════════════════════════════════════
+    # Main Executable (shell)
+    # ═════════════════════════════════════════════════════════
+    # SDL2 window + event loop → wires everything together.
 
-add_executable(shell
-    src/Main.cpp
-    src/app/Window.cpp
-    src/app/EventLoop.cpp
-    src/app/Config.cpp
-)
+    add_executable(shell
+        src/Main.cpp
+        src/app/Window.cpp
+        src/app/EventLoop.cpp
+        src/app/Config.cpp
+    )
 
-target_include_directories(shell PRIVATE ${SHELL_INCLUDE_DIR})
+    target_include_directories(shell PRIVATE ${SHELL_INCLUDE_DIR})
 
-target_link_libraries(shell
-    PRIVATE
-        shell_core
-        renderer_core
-        SDL2::SDL2
-)
+    target_link_libraries(shell
+        PRIVATE
+            shell_core
+            renderer_core
+            SDL2::SDL2
+    )
 
-if(VTERM_FOUND AND TARGET terminal_core)
-    target_link_libraries(shell PRIVATE terminal_core)
-    target_compile_definitions(shell PRIVATE SHELL_HAS_TERMINAL=1)
+    if(VTERM_FOUND AND TARGET terminal_core)
+        target_link_libraries(shell PRIVATE terminal_core)
+        target_compile_definitions(shell PRIVATE SHELL_HAS_TERMINAL=1)
+    endif()
+
+    target_set_warnings(shell)
+    target_enable_sanitizers(shell)
 endif()
-
-target_set_warnings(shell)
-target_enable_sanitizers(shell)
 
 # ═════════════════════════════════════════════════════════
 # Parser REPL (parser_repl) — manual parser test harness
@@ -289,9 +301,11 @@ if(BUILD_MCP AND RAPIDJSON_INCLUDE_DIRS)
     target_set_warnings(mcp_core)
     target_enable_sanitizers(mcp_core)
 
-    # Link MCP into main executable
-    target_link_libraries(shell PRIVATE mcp_core)
-    target_compile_definitions(shell PRIVATE SHELL_HAS_MCP=1)
+    # Link MCP into main executable (only when the GUI shell exe is built)
+    if(TARGET shell)
+        target_link_libraries(shell PRIVATE mcp_core)
+        target_compile_definitions(shell PRIVATE SHELL_HAS_MCP=1)
+    endif()
     message(STATUS "MCP support enabled")
 elseif(BUILD_MCP)
     message(WARNING "MCP support requested but RapidJSON not found — skipping")
@@ -302,7 +316,7 @@ endif()
 # ═════════════════════════════════════════════════════════
 
 file(GLOB SHADER_FILES "${CMAKE_SOURCE_DIR}/shaders/*")
-if(SHADER_FILES)
+if(SHADER_FILES AND TARGET shell)
     add_custom_command(TARGET shell POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_SOURCE_DIR}/shaders"

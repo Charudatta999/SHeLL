@@ -14,7 +14,7 @@ class Process
 
 public:
     Process();
-    ~Process();
+    ~Process() = default;
 
     // Non-Copyable and Non-Moveable
     Process(const Process& process) = delete;

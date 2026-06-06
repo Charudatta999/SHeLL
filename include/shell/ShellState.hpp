@@ -1,13 +1,17 @@
 #ifndef SHELL_SHELL_STATE_HPP
 #define SHELL_SHELL_STATE_HPP
 
-#include "parser/Command.hpp"
-
 #include <map>
 #include <optional>
 #include <set>
 #include <string>
 #include <sys/types.h>
+#include <memory>
+
+namespace parser::ast
+{
+    class AstNode;
+}
 
 namespace shell
 {
@@ -59,10 +63,10 @@ public:
     void SetLastExitCode(int code) noexcept;
 
     // function related funcs
-    void AddFunction(parser::FunctionNode function);
+    void AddFunction(const std::string& name, std::unique_ptr<parser::ast::AstNode> body);
 
     [[nodiscard]]
-    const std::unique_ptr<parser::AstNode>& GetFunctionBody(const std::string& functionName) const;
+   parser::ast::AstNode* GetFunctionBody(const std::string& functionName);
 
     [[nodiscard]]
     bool IsFunctionPresent(const std::string& functionName) const;
@@ -91,7 +95,7 @@ private:
     std::map<std::string, bool> m_shellOptions_;
     pid_t m_shellPid_;
     int m_shellExitCode_;
-    std::map<std::string, parser::FunctionNode> m_functions_;
+    std::map<std::string, std::unique_ptr<parser::ast::AstNode>> m_functions_;
 };
 } // namespace shell
 #endif // SHELL_SHELL_STATE_HPP
