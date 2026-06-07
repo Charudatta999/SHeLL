@@ -125,6 +125,9 @@ add_library(shell_core STATIC
     src/exec/WaitStatus.cpp
     src/exec/ForkRunner.cpp
 
+    # --- Arithmetic ---
+    src/arithmetic/ArithmeticEngine.cpp
+
     # --- Builtins ---
     src/builtins/BuiltinDispatcher.cpp
     src/builtins/Cd.cpp
