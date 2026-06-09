@@ -11,7 +11,7 @@ namespace parser::ast
 {
 class AstVisitor;
 
-class For : public AstNode
+class For final : public AstNode
 {
 public:
     For(std::string var, std::vector<std::string> words, std::unique_ptr<AstNode> body)

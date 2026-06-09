@@ -9,7 +9,7 @@
 namespace parser
 {
 
-class Tokenizer
+class Tokenizer final
 {
 public:
     Tokenizer(const std::string& command);
@@ -31,6 +31,8 @@ private:
     Token ReadSingleQuoted();
     [[nodiscard]]
     Token ReadDoubleQuoted();
+    [[nodiscard]]
+    const std::string ReadArithmeticBody();
     [[nodiscard]]
     char Peek(int ahead = 0) const;
 

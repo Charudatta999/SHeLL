@@ -12,9 +12,12 @@ add_executable(shell_tests
     unit/parser/ParserTest.cpp
     unit/parser/AstPrinterTest.cpp
     unit/shell/ShellStateTest.cpp
+    unit/shell/ExpanderTest.cpp
     unit/exec/CommandSpecTest.cpp
     unit/exec/ForkRunnerTest.cpp
     unit/exec/ExecutorTest.cpp
+    unit/exec/ArithmeticCommandTest.cpp
+    unit/arithmetic/ArithmeticEngineTest.cpp
 )
 
 # Include the main project headers

@@ -1,11 +1,11 @@
 #include "parser/Parser.hpp"
 
-#include "parser/Command.hpp"
 #include "parser/ParserException.hpp"
 #include "parser/Token.hpp"
 #include "parser/ast/Ast.hpp"
 #include "parser/ast/AstNode.hpp"
 #include "parser/ast/Redirect.hpp"
+#include "parser/ast/commands/ArithmeticCommand.hpp"
 #include "parser/ast/commands/AndOr.hpp"
 #include "parser/ast/commands/Group.hpp"
 #include "parser/ast/commands/SimpleCommand.hpp"
@@ -13,7 +13,6 @@
 #include "parser/ast/commands/While.hpp"
 
 #include <cctype>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -562,6 +561,12 @@ std::unique_ptr<ast::AstNode> Parser::ParseCase()
                                        std::move(arms));
 }
 
+std::unique_ptr<ast::AstNode> Parser::ParseArithmeticCommand()
+{
+    auto tok = Expect(TokenType::DLParen, "at start of arithmetic command");
+    return std::make_unique<ast::ArithmeticCommand>(tok.value);
+}
+
 std::unique_ptr<ast::AstNode> Parser::ParseCommand()
 {
     SkipNewlines();
@@ -600,6 +605,7 @@ std::unique_ptr<ast::AstNode> Parser::ParseCommand()
             }
             return ParseSimpleCommand();
         }
+        case TokenType::DLParen: return ParseArithmeticCommand();
         default:
             return ParseSimpleCommand();
     }

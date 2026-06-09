@@ -11,7 +11,7 @@ namespace parser::ast
 class AstVisitor;
 
 
-class List : public AstNode
+class List final : public AstNode
 {
 public:
     struct Item

@@ -10,7 +10,7 @@
 
 namespace parser::ast
 {
-class SimpleCommand : public AstNode
+class SimpleCommand final : public AstNode
 {
 public:
     SimpleCommand(

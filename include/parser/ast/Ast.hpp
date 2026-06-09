@@ -2,6 +2,7 @@
 #define PARSER_AST_AST_HPP
 #include "parser/ast/AstNode.hpp"
 #include "parser/ast/AstVisitor.hpp"
+#include "parser/ast/commands/ArithmeticCommand.hpp"
 #include "parser/ast/commands/Pipeline.hpp"
 #include "parser/ast/commands/AndOr.hpp"
 #include "parser/ast/commands/Case.hpp"

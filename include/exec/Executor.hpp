@@ -45,9 +45,13 @@ private:
     void Visit(parser::ast::For&) override;
     void Visit(parser::ast::If&) override;
     void Visit(parser::ast::Case&) override;
+    void Visit(parser::ast::ArithmeticCommand&) override;
 
     [[nodiscard]]
-    CommandSpec BuildSpec(const parser::ast::SimpleCommand&) const;
+    CommandSpec BuildSpec(const std::vector<std::string>& argv,
+                          const parser::ast::SimpleCommand&) const;
+    [[nodiscard]]
+    std::vector<std::string> ExpandArgv(const std::vector<std::string>& argv);
     std::unique_ptr<shell::ShellState>& m_state_;
     std::unique_ptr<builtins ::BuiltinDispatcher>& m_builtins_;
     int m_status_ = 0;

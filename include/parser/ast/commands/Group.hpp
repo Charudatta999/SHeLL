@@ -7,7 +7,7 @@
 namespace parser::ast
 {
 class AstVisitor;
-class Group : public AstNode
+class Group final : public AstNode
 {
 public:
     Group(std::unique_ptr<AstNode> body)  : m_body_(std::move(body)) {};

@@ -8,10 +8,7 @@
 
 namespace parser::ast
 {
-AstPrinter::AstPrinter()
-    : m_depth_(0)
-{
-}
+AstPrinter::AstPrinter() : m_depth_(0) {}
 
 AstPrinter::~AstPrinter() = default;
 
@@ -184,6 +181,19 @@ void AstPrinter::Visit(Case& node)
         if (arm.body)
             arm.body->Accept(*this);
         --m_depth_;
+    }
+    --m_depth_;
+}
+
+void AstPrinter::Visit(ArithmeticCommand& node)
+{
+    Indent();
+    std::cout << "Arithmetic Command\n";
+    ++m_depth_;
+    if (!node.GetExpr().empty())
+    {
+        Indent();
+        std::cout << node.GetExpr() << "\n";
     }
     --m_depth_;
 }

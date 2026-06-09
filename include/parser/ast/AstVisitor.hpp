@@ -14,6 +14,7 @@ class While;
 class For;
 class If;
 class Case;
+class ArithmeticCommand;
 
 class AstVisitor
 {
@@ -36,6 +37,7 @@ public:
     virtual void Visit(For&) = 0;
     virtual void Visit(If&) = 0;
     virtual void Visit(Case&) = 0;
+    virtual void Visit(ArithmeticCommand&) = 0;
 };
 } // namespace parser::ast
 #endif // PARSER_AST_AST_VISITOR_HPP

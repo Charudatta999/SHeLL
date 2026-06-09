@@ -10,7 +10,7 @@ namespace parser::ast
 
 class AstVisitor;
 
-class While : public AstNode
+class While final : public AstNode
 {
 public:
     While(std::unique_ptr<AstNode> condition, std::unique_ptr<AstNode> body, bool until = false)

@@ -9,7 +9,7 @@ namespace parser::ast
 {
 class AstVisitor;
 
-class Pipeline : public AstNode
+class Pipeline final : public AstNode
 {
 public:
     Pipeline(std::vector<std::unique_ptr<AstNode>> stages, bool bang)

@@ -28,6 +28,7 @@ public:
     void Visit(For& node) override;
     void Visit(If& node) override;
     void Visit(Case& node) override;
+    void Visit(ArithmeticCommand& node) override;
 
 private:
     void Indent() const;

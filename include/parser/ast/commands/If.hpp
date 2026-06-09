@@ -11,7 +11,7 @@ namespace parser::ast
 
 class AstVisitor;
 
-class If : public AstNode
+class If final : public AstNode
 {
 public:
     struct Branch

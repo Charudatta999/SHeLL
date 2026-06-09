@@ -8,10 +8,10 @@
 namespace parser
 {
 
-// ─── Constructor ──────────────────────────────────────────────────────────────
+// ─── Constructor
+// ──────────────────────────────────────────────────────────────
 
-Tokenizer::Tokenizer(const std::string& command)
-    : m_command_(command)
+Tokenizer::Tokenizer(const std::string& command) : m_command_(command)
 {
 }
 
@@ -51,17 +51,19 @@ char Tokenizer::Advance()
 
 bool Tokenizer::IsOperatorStart(char chr) const
 {
-    return chr == '|' || chr == '&' || chr == ';' || chr == '<' || chr == '>' || chr == '(' ||
-           chr == ')' || chr == '{' || chr == '}';
+    return chr == '|' || chr == '&' || chr == ';' || chr == '<' ||
+           chr == '>' || chr == '(' || chr == ')' || chr == '{' ||
+           chr == '}';
 }
 
 bool Tokenizer::IsWordChar(char chr) const
 {
-    return chr != '\0' && chr != '\n' && chr != ' ' && chr != '\t' && !IsOperatorStart(chr) &&
-           chr != '\'' && chr != '"';
+    return chr != '\0' && chr != '\n' && chr != ' ' && chr != '\t' &&
+           !IsOperatorStart(chr) && chr != '\'' && chr != '"';
 }
 
-// ─── Single-quoted string ─────────────────────────────────────────────────────
+// ─── Single-quoted string
+// ─────────────────────────────────────────────────────
 
 Token Tokenizer::ReadSingleQuoted()
 {
@@ -74,14 +76,18 @@ Token Tokenizer::ReadSingleQuoted()
         value += Advance();
 
     if (AtEnd())
-        throw std::runtime_error("unterminated single-quoted string at line " +
-                                 std::to_string(tokLine));
+        throw std::runtime_error(
+            "unterminated single-quoted string at line " +
+            std::to_string(tokLine));
     Advance(); // closing '
-    return Token{
-        .type = TokenType::SingleQuoted, .value = std::move(value), .line = tokLine, .col = tokCol};
+    return Token{.type = TokenType::SingleQuoted,
+                 .value = std::move(value),
+                 .line = tokLine,
+                 .col = tokCol};
 }
 
-// ─── Double-quoted string ─────────────────────────────────────────────────────
+// ─── Double-quoted string
+// ─────────────────────────────────────────────────────
 
 Token Tokenizer::ReadDoubleQuoted()
 {
@@ -103,22 +109,29 @@ Token Tokenizer::ReadDoubleQuoted()
     }
 
     if (AtEnd())
-        throw std::runtime_error("unterminated double-quoted string at line " +
-                                 std::to_string(tokLine));
+        throw std::runtime_error(
+            "unterminated double-quoted string at line " +
+            std::to_string(tokLine));
     Advance(); // closing "
-    return Token{
-        .type = TokenType::DoubleQuoted, .value = value, .fd = -1, .line = tokLine, .col = tokCol};
+    return Token{.type = TokenType::DoubleQuoted,
+                 .value = value,
+                 .fd = -1,
+                 .line = tokLine,
+                 .col = tokCol};
 }
 
-// ─── Word ─────────────────────────────────────────────────────────────────────
+// ─── Word
+// ─────────────────────────────────────────────────────────────────────
 
 Token Tokenizer::ReadWord()
 {
     size_t tokLine = m_line_;
     size_t tokCol = m_col_;
 
-    // ── Fd-prefixed redirect: single digit immediately followed by < or > ──
-    if (std::isdigit(static_cast<unsigned char>(Peek())) && (Peek(1) == '<' || Peek(1) == '>'))
+    // ── Fd-prefixed redirect: single digit immediately followed by <
+    // or > ──
+    if (std::isdigit(static_cast<unsigned char>(Peek())) &&
+        (Peek(1) == '<' || Peek(1) == '>'))
     {
         int fd = Peek() - '0';
         Advance(); // consume digit
@@ -159,8 +172,11 @@ Token Tokenizer::ReadWord()
             if (Peek() == '&')
             {
                 Advance();
-                return {
-                    .type = TokenType::DupIn, .value = "", .fd = fd, .line = opLine, .col = opCol};
+                return {.type = TokenType::DupIn,
+                        .value = "",
+                        .fd = fd,
+                        .line = opLine,
+                        .col = opCol};
             }
             if (Peek() == '>')
             {
@@ -171,8 +187,11 @@ Token Tokenizer::ReadWord()
                         .line = opLine,
                         .col = opCol};
             }
-            return {
-                .type = TokenType::RedirIn, .value = "", .fd = fd, .line = opLine, .col = opCol};
+            return {.type = TokenType::RedirIn,
+                    .value = "",
+                    .fd = fd,
+                    .line = opLine,
+                    .col = opCol};
         }
         else // '>'
         {
@@ -188,8 +207,11 @@ Token Tokenizer::ReadWord()
             if (Peek() == '&')
             {
                 Advance();
-                return {
-                    .type = TokenType::DupOut, .value = "", .fd = fd, .line = opLine, .col = opCol};
+                return {.type = TokenType::DupOut,
+                        .value = "",
+                        .fd = fd,
+                        .line = opLine,
+                        .col = opCol};
             }
             if (Peek() == '|')
             {
@@ -200,22 +222,39 @@ Token Tokenizer::ReadWord()
                         .line = opLine,
                         .col = opCol};
             }
-            return {
-                .type = TokenType::RedirOut, .value = "", .fd = fd, .line = opLine, .col = opCol};
+            return {.type = TokenType::RedirOut,
+                    .value = "",
+                    .fd = fd,
+                    .line = opLine,
+                    .col = opCol};
         }
     }
 
-    // ── Regular word ──────────────────────────────────────────────────────
+    // ── Regular word
+    // ──────────────────────────────────────────────────────
     std::string value;
     while (!AtEnd() && IsWordChar(Peek()))
     {
+        if(Peek() == '$')
+        {
+
+            if(Peek(1) == '(' && Peek(2) == '(')
+            {
+                value+= Advance();
+                value+= Advance();
+                value+= Advance();
+                value+= ReadArithmeticBody() + "))";
+                continue;
+            }
+        }
         if (Peek() == '\\' && m_pos_ + 1 < m_command_.size())
         {
             char next = m_command_[m_pos_ + 1];
             if (next == '\n')
             {
                 Advance(); // backslash
-                Advance(); // newline — line continuation, discard both
+                Advance(); // newline — line continuation, discard
+                           // both
                 SkipWhitespace();
             }
             else
@@ -231,10 +270,15 @@ Token Tokenizer::ReadWord()
     }
 
     TokenType type = ResolveKeyword(value);
-    return {.type = type, .value = value, .fd = -1, .line = tokLine, .col = tokCol};
+    return {.type = type,
+            .value = value,
+            .fd = -1,
+            .line = tokLine,
+            .col = tokCol};
 }
 
-// ─── Keyword resolution ───────────────────────────────────────────────────────
+// ─── Keyword resolution
+// ───────────────────────────────────────────────────────
 
 TokenType Tokenizer::ResolveKeyword(const std::string& word)
 {
@@ -250,7 +294,7 @@ TokenType Tokenizer::ResolveKeyword(const std::string& word)
         {"done", TokenType::Done},
         {"for", TokenType::For},
         {"foreach", TokenType::Foreach},
-        {"end",     TokenType::End},
+        {"end", TokenType::End},
         {"in", TokenType::In},
         {"case", TokenType::Case},
         {"esac", TokenType::Esac},
@@ -263,8 +307,51 @@ TokenType Tokenizer::ResolveKeyword(const std::string& word)
     return (it != kw.end()) ? it->second : TokenType::Word;
 }
 
-// ─── Main tokenize loop ───────────────────────────────────────────────────────
+const std::string Tokenizer::ReadArithmeticBody()
+{
+    size_t tokLine = m_line_;
 
+    std::string value;
+    size_t depth{0};
+    while (!AtEnd())
+    {
+        auto firstChar = Peek();
+        if ( firstChar == '(')
+        {
+            value += Advance();
+            ++depth;
+        }
+        else if (firstChar == ')'  && depth > 0)
+        {
+            value += Advance();
+            --depth;
+        }
+        else if (firstChar == ')')
+        {
+            Advance();
+            if(Peek() == ')')
+            {
+                Advance(); return value;
+            }
+            throw std::runtime_error("malformed ((..))");
+        }
+        else
+        {
+            value+=Advance();
+        }
+
+
+    }
+
+    if (AtEnd())
+        throw std::runtime_error(
+            "unterminated (( string at line " +
+            std::to_string(tokLine));
+    return value;
+}
+
+// ─── Main tokenize loop
+// ───────────────────────────────────────────────────────
 std::vector<Token> Tokenizer::Tokenize()
 {
     std::vector<Token> tokens;
@@ -279,7 +366,8 @@ std::vector<Token> Tokenizer::Tokenize()
         size_t tokCol = m_col_;
         char chr = Peek();
 
-        // ── Newline ───────────────────────────────────────────────────────
+        // ── Newline
+        // ───────────────────────────────────────────────────────
         if (chr == '\n')
         {
             tokens.push_back({.type = TokenType::Newline,
@@ -291,7 +379,8 @@ std::vector<Token> Tokenizer::Tokenize()
             continue;
         }
 
-        // ── Comment ───────────────────────────────────────────────────────
+        // ── Comment
+        // ───────────────────────────────────────────────────────
         if (chr == '#')
         {
             while (!AtEnd() && Peek() != '\n')
@@ -299,7 +388,8 @@ std::vector<Token> Tokenizer::Tokenize()
             continue;
         }
 
-        // ── Operators — greedy longest-match ──────────────────────────────
+        // ── Operators — greedy longest-match
+        // ──────────────────────────────
 
         if (chr == '|')
         {
@@ -351,11 +441,12 @@ std::vector<Token> Tokenizer::Tokenize()
                 if (Peek() == '>')
                 {
                     Advance();
-                    tokens.push_back({.type = TokenType::RedirBothAppend,
-                                      .value = "&>>",
-                                      .fd = -1,
-                                      .line = tokLine,
-                                      .col = tokCol});
+                    tokens.push_back(
+                        {.type = TokenType::RedirBothAppend,
+                         .value = "&>>",
+                         .fd = -1,
+                         .line = tokLine,
+                         .col = tokCol});
                 }
                 else
                 {
@@ -386,11 +477,12 @@ std::vector<Token> Tokenizer::Tokenize()
                 if (Peek() == '&')
                 {
                     Advance();
-                    tokens.push_back({.type = TokenType::DoubleSemiAmp,
-                                      .value = ";;&",
-                                      .fd = -1,
-                                      .line = tokLine,
-                                      .col = tokCol});
+                    tokens.push_back(
+                        {.type = TokenType::DoubleSemiAmp,
+                         .value = ";;&",
+                         .fd = -1,
+                         .line = tokLine,
+                         .col = tokCol});
                 }
                 else
                 {
@@ -530,8 +622,9 @@ std::vector<Token> Tokenizer::Tokenize()
             if (Peek() == '(')
             {
                 Advance();
+                auto line = ReadArithmeticBody();
                 tokens.push_back({.type = TokenType::DLParen,
-                                  .value = "((",
+                                  .value = line,
                                   .fd = -1,
                                   .line = tokLine,
                                   .col = tokCol});
@@ -591,7 +684,8 @@ std::vector<Token> Tokenizer::Tokenize()
             continue;
         }
 
-        // ── [[ and ]] ─────────────────────────────────────────────────────
+        // ── [[ and ]]
+        // ─────────────────────────────────────────────────────
         if (chr == '[' && Peek(1) == '[')
         {
             Advance();
@@ -615,16 +709,21 @@ std::vector<Token> Tokenizer::Tokenize()
             continue;
         }
 
-        // ── ! ─────────────────────────────────────────────────────────────
+        // ── !
+        // ─────────────────────────────────────────────────────────────
         if (chr == '!')
         {
             Advance();
-            tokens.push_back(
-                {.type = TokenType::Bang, .value = "!", .fd = -1, .line = tokLine, .col = tokCol});
+            tokens.push_back({.type = TokenType::Bang,
+                              .value = "!",
+                              .fd = -1,
+                              .line = tokLine,
+                              .col = tokCol});
             continue;
         }
 
-        // ── Quoted strings ────────────────────────────────────────────────
+        // ── Quoted strings
+        // ────────────────────────────────────────────────
         if (chr == '\'')
         {
             tokens.push_back(ReadSingleQuoted());
@@ -636,12 +735,16 @@ std::vector<Token> Tokenizer::Tokenize()
             continue;
         }
 
-        // ── Word (includes fd-prefixed redirects) ─────────────────────────
+        // ── Word (includes fd-prefixed redirects)
+        // ─────────────────────────
         tokens.push_back(ReadWord());
     }
 
-    tokens.push_back(
-        {.type = TokenType::Eof, .value = "", .fd = -1, .line = m_line_, .col = m_col_});
+    tokens.push_back({.type = TokenType::Eof,
+                      .value = "",
+                      .fd = -1,
+                      .line = m_line_,
+                      .col = m_col_});
     return tokens;
 }
 
