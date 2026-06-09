@@ -1,0 +1,86 @@
+#include "shell/Repl.hpp"
+
+#include "builtins/BuiltinDispatcher.hpp"
+#include "exec/ExecException.hpp"
+#include "exec/Executor.hpp"
+#include "parser/Parser.hpp"
+#include "parser/ParserException.hpp"
+#include "parser/Tokenizer.hpp"
+#include "shell/ShellState.hpp"
+#include "arithmetic/ArithmeticException.hpp"
+
+#include <iostream>
+#include <map>
+#include <ostream>
+#include <string>
+
+namespace shell
+{
+
+Repl::Repl()
+    : m_state_(std::make_unique<ShellState>(
+          std::map<std::string, std::string>{}))
+    , m_dispatcher_(std::make_unique<builtins::BuiltinDispatcher>())
+{
+}
+
+Repl::~Repl() = default;
+
+int Repl::Run()
+{
+    
+    std::string line;
+    while (m_state_->IsRunning())
+    {
+        PrintPrompt();
+        if (!ReadLine(line))   // EOF / Ctrl-D
+            break;
+        EvalLine(line);
+    }
+    return m_state_->GetShellExitCode();
+}
+
+void Repl::PrintPrompt()
+{
+   std::cout << "$" << std::flush;
+}
+
+bool Repl::ReadLine(std::string& line)
+{
+    return static_cast<bool>(std::getline(std::cin, line));
+}
+
+int Repl::EvalLine(const std::string& line)
+{
+    try
+    {
+        auto tokenizer = parser::Tokenizer(line);
+
+        const auto& tokens = tokenizer.Tokenize();
+        const auto& parser = parser::Parser(tokens).Parse();
+        auto executor = exec::Executor(m_state_, m_dispatcher_);
+        auto res = executor.Run(parser);
+        if (res != 0)
+        {
+            std::cout << "Command Execution failed with error code :"
+                      << res << "\n";
+        }
+        m_lastStatus_ = res;
+        return res;
+    }
+    catch (const exec::ExecException& ex)
+    {
+        std::cout << ex.what() << "\n";
+    }
+    catch (const parser::ParserException& ex)
+    {
+        std::cout << ex.what() << "\n";
+    }
+    catch (const arithmetic::ArithmeticException& ex)
+    {
+        std::cout << ex.what() << "\n";
+    }
+    return 1;
+}
+
+} // namespace shell

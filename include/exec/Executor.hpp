@@ -31,7 +31,7 @@ public:
     explicit Executor(std::unique_ptr<shell::ShellState>& state,
                       std::unique_ptr<builtins ::BuiltinDispatcher>& builtins);
 
-    int Run(parser::ast::AstNode& root);
+    int Run(const std::unique_ptr<parser::ast::AstNode>& root);
 
 private:
     void Visit(parser::ast::SimpleCommand&) override;
