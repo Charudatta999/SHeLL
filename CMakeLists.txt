@@ -168,6 +168,14 @@ target_set_warnings(shell_core)
 target_enable_sanitizers(shell_core)
 
 # ═════════════════════════════════════════════════════════
+# SheLL REPL
+# ═════════════════════════════════════════════════════════
+
+add_executable(shellrepl src/ReplMain.cpp)
+target_link_libraries(shellrepl PRIVATE shell_core)
+target_include_directories(shellrepl PRIVATE ${SHELL_INCLUDE_DIR})
+
+# ═════════════════════════════════════════════════════════
 # Terminal Emulator Library (terminal_core)
 # ═════════════════════════════════════════════════════════
 # PTY management, libvterm wrapper, scrollback buffer.

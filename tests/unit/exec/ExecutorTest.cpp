@@ -27,7 +27,7 @@ int run(const std::string& src)
     parser::Tokenizer tok(src);
     parser::Parser    p(tok.Tokenize());
     auto              tree = p.Parse();
-    return exec.Run(*tree);
+    return exec.Run(tree);
 }
 }
 

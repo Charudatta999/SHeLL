@@ -36,9 +36,9 @@ Executor::Executor(
 {
 }
 
-int Executor::Run(parser::ast::AstNode& root)
+int Executor::Run(const std::unique_ptr<parser::ast::AstNode>& root)
 {
-    root.Accept(*this);
+    root->Accept(*this);
     return m_status_;
 }
 

@@ -28,7 +28,7 @@ int runOn(const std::string& src, std::unique_ptr<shell::ShellState>& state)
     parser::Tokenizer tok(src);
     parser::Parser    p(tok.Tokenize());
     auto              tree = p.Parse();
-    return exec.Run(*tree);
+    return exec.Run(tree);
 }
 
 std::unique_ptr<shell::ShellState> makeState(std::map<std::string, std::string> vars = {})

@@ -366,21 +366,39 @@ std::unique_ptr<ast::AstNode> Parser::ParseList()
     {
         auto node = ParseAndOr();
         bool background = false;
+        bool separator = false;
         if (Match(TokenType::Background))
         {
             background = true;
+            separator = true;
         }
-        else
+        else if (Match(TokenType::Semi))
         {
-            (void)Match(TokenType::Semi);
+            separator = true;
         }
 
         items.push_back(
             {.node = std::move(node), .background = background});
+
+        if (Check(TokenType::Newline))
+        {
+            separator = true;
+        }
         SkipNewlines();
-        if (IsListTerminator(Peek().type))
+
+        if (AtEnd() || IsListTerminator(Peek().type))
         {
             break;
+        }
+        // Two commands must be separated by ; & newline (or a pipe/&&/|| which
+        // ParseAndOr/ParsePipeline already consumed). No separator -> syntax error.
+        if (!separator)
+        {
+            const Token& got = Peek();
+            throw ParserException(
+                std::string("unexpected token '") + got.value + "'",
+                got.line,
+                got.col);
         }
     }
     // Unwrap a single non-background item — no need for a List wrapper.
