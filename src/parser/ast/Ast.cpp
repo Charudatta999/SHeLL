@@ -25,39 +25,44 @@ void List::Accept(AstVisitor& visitor)
     visitor.Visit(*this);
 }
 
-void Subshell::Accept(AstVisitor& v)
+void Subshell::Accept(AstVisitor& visitor)
 {
-    v.Visit(*this);
+    visitor.Visit(*this);
 }
 
-void Group::Accept(AstVisitor& v)
+void Group::Accept(AstVisitor& visitor)
 {
-    v.Visit(*this);
+    visitor.Visit(*this);
 }
 
-void Function::Accept(AstVisitor& v)
+void Function::Accept(AstVisitor& visitor)
 {
-    v.Visit(*this);
+    visitor.Visit(*this);
 }
 
-void While::Accept(AstVisitor& v)
+void While::Accept(AstVisitor& visitor)
 {
-    v.Visit(*this);
+    visitor.Visit(*this);
 }
 
-void For::Accept(AstVisitor& v)
+void For::Accept(AstVisitor& visitor)
 {
-    v.Visit(*this);
+    visitor.Visit(*this);
 }
 
-void If::Accept(AstVisitor& v)
+void If::Accept(AstVisitor& visitor)
 {
-    v.Visit(*this);
+    visitor.Visit(*this);
 }
 
-void Case::Accept(AstVisitor& v)
+void Case::Accept(AstVisitor& visitor)
 {
-    v.Visit(*this);
+    visitor.Visit(*this);
+}
+
+void ArithmeticCommand::Accept(AstVisitor& visitor)
+{
+    visitor.Visit(*this);
 }
 
 } // namespace parser::ast

@@ -103,6 +103,8 @@ add_library(shell_core STATIC
     # --- Shell Core ---
     src/shell/ShellState.cpp
     src/shell/ShellException.cpp
+    src/shell/ShellArithmeticVars.cpp
+    src/shell/expander/Expander.cpp
     src/shell/Repl.cpp
     src/shell/Prompt.cpp
 
@@ -127,6 +129,7 @@ add_library(shell_core STATIC
 
     # --- Arithmetic ---
     src/arithmetic/ArithmeticEngine.cpp
+    src/arithmetic/ArithmeticException.cpp
 
     # --- Builtins ---
     src/builtins/BuiltinDispatcher.cpp

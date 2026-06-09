@@ -55,6 +55,7 @@ private:
     std::unique_ptr<ast::AstNode> ParseWhile();
     std::unique_ptr<ast::AstNode> ParseFor();
     std::unique_ptr<ast::AstNode> ParseCase();
+    std::unique_ptr<ast::AstNode> ParseArithmeticCommand();
 
     std::vector<Token> m_tokens_;
     std::size_t m_pos_ = 0;

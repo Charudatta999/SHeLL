@@ -10,7 +10,7 @@ namespace parser::ast
 {
 class AstVisitor;
 
-class Function : public AstNode
+class Function final : public AstNode
 {
 public:
     Function(std::string name, std::unique_ptr<AstNode> body)

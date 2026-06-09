@@ -11,7 +11,7 @@ namespace parser::ast
 {
 class AstVisitor;
 
-class AndOr : public AstNode
+class AndOr final : public AstNode
 {
   public:
     enum class Op : uint8_t

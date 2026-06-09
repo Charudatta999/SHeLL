@@ -11,7 +11,7 @@ namespace parser::ast
 {
 class AstVisitor;
 
-class Case : public AstNode
+class Case final : public AstNode
 {
 public:
     struct Arm

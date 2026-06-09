@@ -9,7 +9,7 @@ namespace parser::ast
 {
 class AstVisitor;
 
-class Subshell : public AstNode
+class Subshell final : public AstNode
 {
 public:
     Subshell(std::unique_ptr<AstNode> body)  : m_body_(std::move(body)) {}
