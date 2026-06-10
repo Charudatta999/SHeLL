@@ -9,7 +9,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
+#include <glob.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -136,6 +136,22 @@ std::vector<std::string> Expand(const std::string& word,
             out += word[pos];
             ++pos;
         }
+    }
+    if (out.find_first_of("*?[") != std::string::npos)
+    {
+        glob_t globResult;
+        if (glob(out.c_str(), 0, nullptr, &globResult) == 0 &&
+            globResult.gl_pathc > 0)
+        {
+            std::vector<std::string> matches;
+            for (std::size_t i = 0; i < globResult.gl_pathc; ++i)
+            {
+                matches.push_back(globResult.gl_pathv[i]);
+            }
+            globfree(&globResult);
+            return matches;
+        }
+        globfree(&globResult);
     }
     return {out};
 }
