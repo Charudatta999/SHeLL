@@ -9,17 +9,37 @@
 #include "shell/ShellState.hpp"
 #include "arithmetic/ArithmeticException.hpp"
 
+#include <cstddef>
 #include <iostream>
 #include <map>
 #include <ostream>
 #include <string>
+#include <unistd.h>
 
+extern char** environ;
+
+namespace
+{
+    std::map<std::string,std::string> LoadEnvironMap()
+    {
+        std::map<std::string, std::string> vars;
+        for (char** envPtr = environ; *envPtr != nullptr; ++envPtr)
+        {
+            std::string entry = *envPtr;
+            auto pos = entry.find('=');
+            if (pos == std::string::npos) continue;
+            auto key   = entry.substr(0, pos);
+            auto value = entry.substr(pos + 1);
+            vars.emplace(key,value);
+        }
+        return vars;
+    }
+}
 namespace shell
 {
 
 Repl::Repl()
-    : m_state_(std::make_unique<ShellState>(
-          std::map<std::string, std::string>{}))
+    : m_state_(std::make_unique<ShellState>(LoadEnvironMap()))
     , m_dispatcher_(std::make_unique<builtins::BuiltinDispatcher>())
 {
 }
@@ -28,12 +48,12 @@ Repl::~Repl() = default;
 
 int Repl::Run()
 {
-    
+
     std::string line;
     while (m_state_->IsRunning())
     {
         PrintPrompt();
-        if (!ReadLine(line))   // EOF / Ctrl-D
+        if (!ReadLine(line))
             break;
         EvalLine(line);
     }
@@ -60,11 +80,6 @@ int Repl::EvalLine(const std::string& line)
         const auto& parser = parser::Parser(tokens).Parse();
         auto executor = exec::Executor(m_state_, m_dispatcher_);
         auto res = executor.Run(parser);
-        if (res != 0)
-        {
-            std::cout << "Command Execution failed with error code :"
-                      << res << "\n";
-        }
         m_lastStatus_ = res;
         return res;
     }
