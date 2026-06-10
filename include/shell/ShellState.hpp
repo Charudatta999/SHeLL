@@ -15,6 +15,8 @@ namespace parser::ast
 
 namespace shell
 {
+class JobTable;
+
 class ShellState
 {
 
@@ -85,6 +87,7 @@ public:
     [[nodiscard]]
     bool IsRunning() const;
     void RequestExit(int exitCode) noexcept;
+    std::unique_ptr<JobTable>& GetJobs();
 
 private:
     std::string m_cwd_;
@@ -96,6 +99,7 @@ private:
     pid_t m_shellPid_;
     int m_shellExitCode_;
     std::map<std::string, std::unique_ptr<parser::ast::AstNode>> m_functions_;
+    std::unique_ptr<JobTable> m_jobsTable_;
 };
 } // namespace shell
 #endif // SHELL_SHELL_STATE_HPP

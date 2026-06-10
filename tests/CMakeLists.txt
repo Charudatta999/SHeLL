@@ -13,6 +13,7 @@ add_executable(shell_tests
     unit/parser/AstPrinterTest.cpp
     unit/shell/ShellStateTest.cpp
     unit/shell/ExpanderTest.cpp
+    unit/shell/JobTableTest.cpp
     unit/exec/CommandSpecTest.cpp
     unit/exec/ForkRunnerTest.cpp
     unit/exec/ExecutorTest.cpp

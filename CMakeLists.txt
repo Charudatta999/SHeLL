@@ -105,6 +105,7 @@ add_library(shell_core STATIC
     src/shell/ShellException.cpp
     src/shell/ShellArithmeticVars.cpp
     src/shell/expander/Expander.cpp
+    src/shell/JobTable.cpp
     src/shell/Repl.cpp
     src/shell/Prompt.cpp
 
@@ -137,6 +138,7 @@ add_library(shell_core STATIC
     src/builtins/Exit.cpp
     src/builtins/Pwd.cpp
     src/builtins/Echo.cpp
+    src/builtins/Jobs.cpp
 
     # --- Signals ---
     src/signals/SignalManager.cpp
@@ -174,6 +176,8 @@ target_enable_sanitizers(shell_core)
 add_executable(shellrepl src/ReplMain.cpp)
 target_link_libraries(shellrepl PRIVATE shell_core)
 target_include_directories(shellrepl PRIVATE ${SHELL_INCLUDE_DIR})
+target_set_warnings(shellrepl)
+target_enable_sanitizers(shellrepl)
 
 # ═════════════════════════════════════════════════════════
 # Terminal Emulator Library (terminal_core)

@@ -1,6 +1,7 @@
 #include "shell/ShellState.hpp"
 
 #include "parser/ast/commands/Function.hpp"
+#include "shell/JobTable.hpp"
 #include "shell/ShellException.hpp"
 #include "utils/ErrorCodes.hpp"
 
@@ -12,7 +13,8 @@
 namespace shell
 {
 
-ShellState::ShellState(const std::map<std::string, std::string>& globalVars)
+ShellState::ShellState(
+    const std::map<std::string, std::string>& globalVars)
     : m_cwd_{std::filesystem::current_path().string()}
     , m_vars_{globalVars}
     , m_exportedVars_{}
@@ -22,12 +24,14 @@ ShellState::ShellState(const std::map<std::string, std::string>& globalVars)
     , m_shellPid_{getpid()}
     , m_shellExitCode_{0}
     , m_functions_{}
+    , m_jobsTable_(std::make_unique<JobTable>())
 {
 }
 
 ShellState::~ShellState() = default;
 
-// ── CWD ──────────────────────────────────────────────────────────────────────
+// ── CWD
+// ──────────────────────────────────────────────────────────────────────
 
 const std::string& ShellState::GetCWD() const
 {
@@ -39,16 +43,19 @@ void ShellState::SetCWD(const std::string& currentDir)
     m_cwd_ = currentDir;
 }
 
-// ── PID ──────────────────────────────────────────────────────────────────────
+// ── PID
+// ──────────────────────────────────────────────────────────────────────
 
 pid_t ShellState::GetPid() const
 {
     return m_shellPid_;
 }
 
-// ── Variables ────────────────────────────────────────────────────────────────
+// ── Variables
+// ────────────────────────────────────────────────────────────────
 
-std::optional<std::string> ShellState::GetVar(const std::string& varName) const
+std::optional<std::string>
+ShellState::GetVar(const std::string& varName) const
 {
     auto itr = m_vars_.find(varName);
     if (itr != m_vars_.end())
@@ -71,7 +78,8 @@ std::map<std::string, std::string> ShellState::GetLocalVars() const
     return localVars;
 }
 
-void ShellState::SetVar(const std::string& name, const std::string& value) noexcept
+void ShellState::SetVar(const std::string& name,
+                        const std::string& value) noexcept
 {
     try
     {
@@ -120,7 +128,8 @@ std::map<std::string, std::string> ShellState::GetEnv() const
     return envVars;
 }
 
-// ── Exit codes ───────────────────────────────────────────────────────────────
+// ── Exit codes
+// ───────────────────────────────────────────────────────────────
 
 int ShellState::GetLastCommandExitCode() const
 {
@@ -137,14 +146,18 @@ void ShellState::SetLastExitCode(int code) noexcept
     m_lastExitCode_ = code;
 }
 
-// ── Functions ────────────────────────────────────────────────────────────────
+// ── Functions
+// ────────────────────────────────────────────────────────────────
 
-void ShellState::AddFunction(const std::string& name, std::unique_ptr<parser::ast::AstNode> body)
+void ShellState::AddFunction(
+    const std::string& name,
+    std::unique_ptr<parser::ast::AstNode> body)
 {
     m_functions_.emplace(name, std::move(body));
 }
 
-parser::ast::AstNode* ShellState::GetFunctionBody(const std::string& functionName)
+parser::ast::AstNode*
+ShellState::GetFunctionBody(const std::string& functionName)
 {
     try
     {
@@ -161,7 +174,8 @@ parser::ast::AstNode* ShellState::GetFunctionBody(const std::string& functionNam
     }
 }
 
-bool ShellState::IsFunctionPresent(const std::string& functionName) const
+bool ShellState::IsFunctionPresent(
+    const std::string& functionName) const
 {
     return m_functions_.count(functionName);
 }
@@ -171,7 +185,8 @@ void ShellState::UnsetFunction(const std::string& functionName)
     m_functions_.erase(functionName);
 }
 
-// ── Shell options ─────────────────────────────────────────────────────────────
+// ── Shell options
+// ─────────────────────────────────────────────────────────────
 
 void ShellState::SetOption(const std::string& option)
 {
@@ -189,7 +204,8 @@ bool ShellState::IsOptionEnabled(const std::string& option) const
     return itr != m_shellOptions_.end() && itr->second;
 }
 
-// ── Running state ─────────────────────────────────────────────────────────────
+// ── Running state
+// ─────────────────────────────────────────────────────────────
 
 bool ShellState::IsRunning() const
 {
@@ -200,6 +216,11 @@ void ShellState::RequestExit(int exitCode) noexcept
 {
     m_runningFlag_ = false;
     m_shellExitCode_ = exitCode;
+}
+
+std::unique_ptr<JobTable>& ShellState::GetJobs()
+{
+    return m_jobsTable_;
 }
 
 } // namespace shell

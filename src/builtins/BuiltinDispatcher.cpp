@@ -16,6 +16,7 @@ BuiltinDispatcher::BuiltinDispatcher()
     m_table_["echo"] = Echo;
     m_table_["exit"] = Exit;
     m_table_["pwd"]  = Pwd;
+    m_table_["jobs"]  = Jobs;
 }
 
 bool BuiltinDispatcher::IsBuiltin(const std::string& name) const
