@@ -6,6 +6,7 @@
 #include "parser/Parser.hpp"
 #include "parser/ParserException.hpp"
 #include "parser/Tokenizer.hpp"
+#include "shell/JobTable.hpp"
 #include "shell/ShellState.hpp"
 #include "arithmetic/ArithmeticException.hpp"
 
@@ -52,6 +53,11 @@ int Repl::Run()
     std::string line;
     while (m_state_->IsRunning())
     {
+        auto finishedJobs = m_state_->GetJobs()->Reap();
+        for (auto& job : finishedJobs)
+        {
+            std::cout << "[" << job.id << "]+ Done " << job.command << "\n";
+        }
         PrintPrompt();
         if (!ReadLine(line))
             break;

@@ -19,12 +19,15 @@
 #include "parser/ast/commands/SimpleCommand.hpp"
 #include "parser/ast/commands/Subshell.hpp"
 #include "parser/ast/commands/While.hpp"
+#include "shell/JobTable.hpp"
 #include "shell/ShellArithmeticVars.hpp"
 #include "shell/ShellState.hpp"
 #include "shell/expander/Expander.hpp"
+#include "utils/ErrorCodes.hpp"
 
 #include <fnmatch.h>
 #include <memory>
+#include <iostream>
 
 namespace exec
 {
@@ -44,9 +47,11 @@ int Executor::Run(const std::unique_ptr<parser::ast::AstNode>& root)
 
 CommandSpec
 Executor::BuildSpec(const std::vector<std::string>& argv,
-                   const parser::ast::SimpleCommand& command) const
+                    const parser::ast::SimpleCommand& command) const
 {
-    return CommandSpec(argv, command.Redirects(), command.Assignments());
+    return CommandSpec(argv,
+                       command.Redirects(),
+                       command.Assignments());
 }
 
 std::vector<std::string>
@@ -71,7 +76,8 @@ void Executor::Visit(parser::ast::SimpleCommand& command)
         for (const auto& assignment : command.Assignments())
             m_state_->SetVar(
                 assignment.first,
-                shell::expander::Expand(assignment.second, m_state_).front());
+                shell::expander::Expand(assignment.second, m_state_)
+                    .front());
         m_status_ = 0;
         return;
     }
@@ -130,9 +136,32 @@ void Executor::Visit(parser::ast::List& list)
     const auto& items = list.GetItems();
     for (const auto& item : items)
     {
-        // #TODO: Issue filed #3 need to implement job control
-        // mechanism for background process to support &
-        item.node->Accept(*this);
+        if (item.background)
+        {
+            auto runner = ForkRunner();
+            int errCode = runner.Run(
+                [&]
+                {
+                    item.node->Accept(*this);
+                    return m_status_;
+                },
+                true);
+            if (errCode == PROCESS_RUNNING)
+            {
+                pid_t pid = runner.Pid();
+                if (pid > 0)
+                {
+                    auto& jobTable = m_state_->GetJobs();
+                    auto id = jobTable->Add(pid, "cmd");
+                    m_status_ = 0;
+                    std::cout << "[" << id << "] " << pid << "\n";
+                }
+            }
+        }
+        else
+        {
+            item.node->Accept(*this);
+        }
     }
 }
 
@@ -233,7 +262,7 @@ void Executor::Visit(parser::ast::ArithmeticCommand& node)
     {
         auto result =
             arithmetic::engine::Evaluate(node.GetExpr(), adapter);
-            m_status_ = (result != 0 ) ? 0 :1;
+        m_status_ = (result != 0) ? 0 : 1;
     }
     catch (const arithmetic::ArithmeticException& ex)
     {

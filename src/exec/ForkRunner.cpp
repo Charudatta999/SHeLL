@@ -1,7 +1,7 @@
 #include "exec/ForkRunner.hpp"
 
 #include "exec/WaitStatus.hpp"
-
+#include "utils/ErrorCodes.hpp"
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -65,7 +65,7 @@ int ForkRunner::Wait(bool background)
     if (wait.IsRunning())
     {
         m_running_ = true;
-        return -1;
+        return PROCESS_RUNNING;
     }
     if (wait.Exited())
     {

@@ -14,14 +14,24 @@ struct BuiltinContext
     int inFd = 0;
     int outFd = 1;
     int errFd = 2;
-    BuiltinContext(std::unique_ptr<shell::ShellState>& state) : m_state_(state) {}
+
+    BuiltinContext(std::unique_ptr<shell::ShellState>& state)
+        : m_state_(state)
+    {
+    }
 };
 
-int Cd  (const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
+int Cd(const std::vector<std::string>& argv,
+       std::unique_ptr<BuiltinContext>& ctx);
 [[maybe_unused]]
-int Echo(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
-int Exit(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
+int Echo(const std::vector<std::string>& argv,
+         std::unique_ptr<BuiltinContext>& ctx);
+int Exit(const std::vector<std::string>& argv,
+         std::unique_ptr<BuiltinContext>& ctx);
 [[maybe_unused]]
-int Pwd(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
+int Pwd(const std::vector<std::string>& argv,
+        std::unique_ptr<BuiltinContext>& ctx);
+int Jobs(const std::vector<std::string>& /*argv*/,
+         std::unique_ptr<BuiltinContext>& ctx);
 } // namespace builtins
 #endif // BUILTIN_BUILTIN_FUNCTION_HPP
