@@ -2,12 +2,14 @@
 
 #include "arithmetic/ArithmeticEngine.hpp"
 #include "arithmetic/ArithmeticException.hpp"
+#include "parser/ParserException.hpp"
 #include "shell/ShellArithmeticVars.hpp"
 #include "shell/ShellState.hpp"
 
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -59,6 +61,25 @@ std::string ReadArithBody(const std::string& word, std::size_t& pos)
         "unterminated arithmetic expansion $((");
 }
 
+std::string ReadWord(const std::string& word, std::size_t& pos)
+{
+    std::string out;
+    size_t index = pos;
+    while (index < word.size())
+    {
+        if (std::isalnum(word[index]) || word[index] == '_')
+        {
+            out += word[index];
+            index++;
+        }
+        else
+        {
+            break;
+        }
+    }
+    pos = index;
+    return out;
+}
 } // namespace
 
 std::vector<std::string> Expand(const std::string& word,
@@ -80,16 +101,34 @@ std::vector<std::string> Expand(const std::string& word,
                 arithmetic::engine::Evaluate(expr, adapter);
             out += std::to_string(result);
         }
-        else if ((word[pos] == '$') &&
-             (std::isalpha(word[pos+1]) || word[pos+1] == '_'))
+        else if (word[pos] == '$' && word[pos + 1] == '{')
+        {
+            pos += 2;
+            auto key = ReadWord(word, pos);
+            auto value = state->GetVar(key);
+            out += value.value_or("");
+            if (pos < word.size() && word[pos] == '}')
+                ++pos;
+            else
+            {
+                throw parser::ParserException("bad substitution",
+                                              0,
+                                              0);
+            }
+        }
+        else if ((word[pos] == '$') && (std::isalpha(word[pos + 1]) ||
+                                        word[pos + 1] == '_'))
         {
             std::size_t start = pos + 1;
             std::size_t end = start;
-             while (end < word.size() && (std::isalnum(word[end]) || word[end] == '_'))
-            {++end;}
-            auto key = word.substr(start,end - start);
+            while (end < word.size() &&
+                   (std::isalnum(word[end]) || word[end] == '_'))
+            {
+                ++end;
+            }
+            auto key = word.substr(start, end - start);
             auto value = state->GetVar(key);
-            out+=value.value_or("");
+            out += value.value_or("");
             pos = end;
         }
         else
