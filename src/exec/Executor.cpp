@@ -204,7 +204,6 @@ void Executor::Visit(parser::ast::If& condi)
 
 void Executor::Visit(parser::ast::Case& case_)
 {
-
     const auto& word = case_.GetWord();
     const auto& arms = case_.GetArms();
     for (const auto& arm : arms)
