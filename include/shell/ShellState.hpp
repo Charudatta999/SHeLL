@@ -32,7 +32,7 @@ public:
     const std::string& GetCWD() const;
 
     [[nodiscard]]
-    pid_t GetPid() const;
+    pid_t GetShellPid() const;
 
     void SetCWD(const std::string& currentDir);
 
@@ -62,7 +62,7 @@ public:
     [[nodiscard]]
     int GetShellExitCode() const;
 
-    void SetLastExitCode(int code) noexcept;
+    void SetLastCommandExitCode(int code) noexcept;
 
     // function related funcs
     void AddFunction(const std::string& name, std::unique_ptr<parser::ast::AstNode> body);
@@ -93,7 +93,7 @@ private:
     std::string m_cwd_;
     std::map<std::string, std::string> m_vars_;
     std::set<std::string> m_exportedVars_;
-    int m_lastExitCode_;
+    int m_lastCommandExitCode_;
     bool m_runningFlag_;
     std::map<std::string, bool> m_shellOptions_;
     pid_t m_shellPid_;

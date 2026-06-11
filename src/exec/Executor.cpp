@@ -33,9 +33,10 @@ namespace exec
 {
 Executor::Executor(
     std::unique_ptr<shell::ShellState>& state,
-    std::unique_ptr<builtins ::BuiltinDispatcher>& builtins)
+    std::unique_ptr<builtins ::BuiltinDispatcher>& builtins, const shell::expander::CommandRunner& cmdRunner)
     : m_state_(state)
     , m_builtins_(builtins)
+    , m_cmdRunner_(cmdRunner)
 {
 }
 
@@ -60,7 +61,7 @@ Executor::ExpandArgv(const std::vector<std::string>& argv)
     std::vector<std::string> out;
     for (const auto& word : argv)
     {
-        auto pieces = shell::expander::Expand(word, m_state_);
+        auto pieces = shell::expander::Expand(word, m_state_, m_cmdRunner_);
         for (auto& piece : pieces)
             out.push_back(std::move(piece));
     }
@@ -76,7 +77,7 @@ void Executor::Visit(parser::ast::SimpleCommand& command)
         for (const auto& assignment : command.Assignments())
             m_state_->SetVar(
                 assignment.first,
-                shell::expander::Expand(assignment.second, m_state_)
+                shell::expander::Expand(assignment.second, m_state_, m_cmdRunner_)
                     .front());
         m_status_ = 0;
         return;

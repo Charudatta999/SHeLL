@@ -13,6 +13,7 @@ public:
     ParserException(const std::string& message,
                     size_t line,
                     size_t col);
+    ParserException(const std::string& message);
     ~ParserException() = default;
     ParserException(const ParserException&) = default;
     ParserException& operator=(const ParserException&) = default;

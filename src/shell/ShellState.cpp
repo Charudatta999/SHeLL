@@ -18,7 +18,7 @@ ShellState::ShellState(
     : m_cwd_{std::filesystem::current_path().string()}
     , m_vars_{globalVars}
     , m_exportedVars_{}
-    , m_lastExitCode_{0}
+    , m_lastCommandExitCode_{0}
     , m_runningFlag_{true}
     , m_shellOptions_{}
     , m_shellPid_{getpid()}
@@ -46,7 +46,7 @@ void ShellState::SetCWD(const std::string& currentDir)
 // ── PID
 // ──────────────────────────────────────────────────────────────────────
 
-pid_t ShellState::GetPid() const
+pid_t ShellState::GetShellPid() const
 {
     return m_shellPid_;
 }
@@ -133,7 +133,7 @@ std::map<std::string, std::string> ShellState::GetEnv() const
 
 int ShellState::GetLastCommandExitCode() const
 {
-    return m_lastExitCode_;
+    return m_lastCommandExitCode_;
 }
 
 int ShellState::GetShellExitCode() const
@@ -141,9 +141,9 @@ int ShellState::GetShellExitCode() const
     return m_shellExitCode_;
 }
 
-void ShellState::SetLastExitCode(int code) noexcept
+void ShellState::SetLastCommandExitCode(int code) noexcept
 {
-    m_lastExitCode_ = code;
+    m_lastCommandExitCode_ = code;
 }
 
 // ── Functions

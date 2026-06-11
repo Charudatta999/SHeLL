@@ -127,6 +127,7 @@ add_library(shell_core STATIC
     src/exec/Redirection.cpp
     src/exec/WaitStatus.cpp
     src/exec/ForkRunner.cpp
+    src/exec/CaptureOutput.cpp
 
     # --- Arithmetic ---
     src/arithmetic/ArithmeticEngine.cpp

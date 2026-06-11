@@ -1,6 +1,7 @@
 #ifndef SHELL_REPL_HPP
 #define SHELL_REPL_HPP
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -37,7 +38,7 @@ private:
 
     std::unique_ptr<ShellState> m_state_;
     std::unique_ptr<builtins::BuiltinDispatcher> m_dispatcher_;
-    int  m_lastStatus_ = 0;
+    std::function<std::string(const std::string&)> m_cmdRunner_;
 };
 
 } // namespace shell

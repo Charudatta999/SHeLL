@@ -22,7 +22,9 @@ int run(const std::string& src)
 {
     auto state = std::make_unique<shell::ShellState>(std::map<std::string, std::string>{});
     auto disp  = std::make_unique<builtins::BuiltinDispatcher>();
-    exec::Executor exec(state, disp);
+    shell::expander::CommandRunner stubRunner =
+        [](const std::string&) { return std::string{}; };
+    exec::Executor exec(state, disp, stubRunner);
 
     parser::Tokenizer tok(src);
     parser::Parser    p(tok.Tokenize());

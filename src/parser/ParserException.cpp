@@ -14,6 +14,10 @@ ParserException::ParserException(const std::string& message,
                  " at col: " + std::to_string(col))
 {
 }
+ParserException::ParserException(const std::string& message)
+    : m_message_(message)
+{
+}
 
 const char* ParserException::what() const noexcept
 {

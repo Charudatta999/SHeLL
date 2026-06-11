@@ -1,5 +1,7 @@
 #include "parser/Tokenizer.hpp"
 
+#include "parser/ParserException.hpp"
+
 #include <cctype>
 #include <cstddef>
 #include <stdexcept>
@@ -245,6 +247,33 @@ Token Tokenizer::ReadWord()
                 value += Advance();
                 value += ReadArithmeticBody() + "))";
                 continue;
+            }
+            else if (Peek(1) == '(')
+            {
+                size_t depth = 1;
+                value += Advance();
+                value += Advance();
+                while (!AtEnd())
+                {
+                    if (Peek() == '(')
+                    {
+                        ++depth;
+                    }
+                    else if (Peek() == ')')
+                    {
+                        --depth;
+                    }
+                    value += Advance();
+                    if (depth == 0)
+                    {
+                        break;
+                    }
+                }
+                if (depth != 0)
+                {
+                    throw ParserException(
+                        "unterminated command substitution");
+                }
             }
             else if (Peek(1) == '{')
             {
