@@ -614,3 +614,51 @@ TEST(ParserError, CarriesLineAndCol)
         EXPECT_GT(std::string(e.what()).size(), 0u);
     }
 }
+
+// ─── Incomplete vs malformed (REPL continuation, PS2) ───────────────────────
+// Input that just ends too early throws IncompleteInputException so the
+// REPL keeps reading lines; genuinely malformed input must NOT.
+
+TEST(ParserIncomplete, OpenIf)        { EXPECT_THROW(parse("if true"), IncompleteInputException); }
+TEST(ParserIncomplete, OpenWhile)     { EXPECT_THROW(parse("while true; do echo x"), IncompleteInputException); }
+TEST(ParserIncomplete, TrailingAnd)   { EXPECT_THROW(parse("echo a &&"), IncompleteInputException); }
+TEST(ParserIncomplete, OpenSubshell)  { EXPECT_THROW(parse("(echo a"), IncompleteInputException); }
+TEST(ParserIncomplete, OpenSingleQuote) { EXPECT_THROW(parse("echo 'open"), IncompleteInputException); }
+TEST(ParserIncomplete, OpenDoubleQuote) { EXPECT_THROW(parse("echo \"open"), IncompleteInputException); }
+TEST(ParserIncomplete, OpenCommandSub)  { EXPECT_THROW(parse("echo $(foo"), IncompleteInputException); }
+
+// Malformed mid-stream stays a plain ParserException — more input can't fix
+// it, so the REPL must report it instead of showing a PS2 prompt.
+TEST(ParserIncomplete, LoneFiIsNotIncomplete)
+{
+    try
+    {
+        parse("fi");
+        FAIL() << "expected ParserException";
+    }
+    catch (const IncompleteInputException&)
+    {
+        FAIL() << "'fi' alone must be malformed, not incomplete";
+    }
+    catch (const ParserException&)
+    {
+        // correct: real syntax error
+    }
+}
+
+TEST(ParserIncomplete, BadTokenMidStreamIsNotIncomplete)
+{
+    try
+    {
+        parse("echo a | | echo b");
+        FAIL() << "expected ParserException";
+    }
+    catch (const IncompleteInputException&)
+    {
+        FAIL() << "mid-stream junk must be malformed, not incomplete";
+    }
+    catch (const ParserException&)
+    {
+        // correct: real syntax error
+    }
+}

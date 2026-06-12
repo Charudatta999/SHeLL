@@ -80,10 +80,44 @@ std::string ReadWord(const std::string& word, std::size_t& pos)
     pos = index;
     return out;
 }
+
+std::string ReadCommandBody(const std::string& word, std::size_t& pos)
+{
+    std::string out;
+    int depth = 0;
+    while (pos < word.size())
+    {
+        char chr = word[pos];
+        if (chr == '(')
+        {
+            ++depth;
+            out += chr;
+            ++pos;
+        }
+        else if (chr == ')' && depth > 0)
+        {
+            --depth;
+            out += chr;
+            ++pos;
+        }
+        else if (chr == ')') // depth == 0 -> start of closing ")"
+        {
+            ++pos; // consume the closing ")"
+            return out;
+        }
+        else
+        {
+            out += chr;
+            ++pos;
+        }
+    }
+    throw parser::ParserException(
+        "unterminated command substitution");
+}
 } // namespace
 
 std::vector<std::string> Expand(const std::string& word,
-                                std::unique_ptr<ShellState>& state)
+                                std::unique_ptr<ShellState>& state,  const CommandRunner& cmdRunner)
 {
     std::string out;
     ShellArithmeticVars adapter(state);
@@ -100,6 +134,11 @@ std::vector<std::string> Expand(const std::string& word,
             std::int64_t result =
                 arithmetic::engine::Evaluate(expr, adapter);
             out += std::to_string(result);
+        }
+        else if( word[pos] == '$' && word[pos+1] == '(')
+        {
+            pos += 2; // skip "$(" so the body scan starts inside
+            out+= cmdRunner(ReadCommandBody(word, pos));
         }
         else if (word[pos] == '$' && word[pos + 1] == '{')
         {
@@ -130,6 +169,18 @@ std::vector<std::string> Expand(const std::string& word,
             auto value = state->GetVar(key);
             out += value.value_or("");
             pos = end;
+        }
+        else if (word[pos] == '$' && pos + 1 < word.size() &&
+                 word[pos + 1] == '?')
+        {
+            pos += 2;
+            out += std::to_string(state->GetLastCommandExitCode());
+        }
+        else if (word[pos] == '$' && pos + 1 < word.size() &&
+                 word[pos + 1] == '$')
+        {
+            pos += 2;
+            out += std::to_string(state->GetShellPid());
         }
         else
         {

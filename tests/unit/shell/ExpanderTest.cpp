@@ -27,11 +27,15 @@ makeState(std::map<std::string, std::string> vars = {})
     return std::make_unique<shell::ShellState>(std::move(vars));
 }
 
+// Stub: command substitution is exercised at the REPL level, not here.
+const shell::expander::CommandRunner stubRunner =
+    [](const std::string&) { return std::string{}; };
+
 // Expand a single word; expansion currently yields exactly one piece.
 std::string expand1(const std::string& word,
                     std::unique_ptr<shell::ShellState>& state)
 {
-    auto pieces = shell::expander::Expand(word, state);
+    auto pieces = shell::expander::Expand(word, state, stubRunner);
     return pieces.empty() ? "" : pieces.front();
 }
 } // namespace
@@ -159,7 +163,7 @@ TEST(Expander, BracedUnterminatedThrows)
 TEST(Expander, GlobNoMatchStaysLiteral)
 {
     auto s = makeState();
-    auto pieces = shell::expander::Expand("*.no_such_ext_xyz", s);
+    auto pieces = shell::expander::Expand("*.no_such_ext_xyz", s, stubRunner);
     ASSERT_EQ(pieces.size(), 1u);
     EXPECT_EQ(pieces.front(), "*.no_such_ext_xyz"); // bash default: unmatched -> literal
 }
@@ -179,7 +183,7 @@ TEST(Expander, GlobMatchesFiles)
     ASSERT_EQ(::chdir(dir), 0);
 
     auto s      = makeState();
-    auto pieces = shell::expander::Expand("*.txt", s);
+    auto pieces = shell::expander::Expand("*.txt", s, stubRunner);
 
     ASSERT_EQ(::chdir(prev), 0); // restore before asserting
 
@@ -192,4 +196,86 @@ TEST(Expander, GlobMatchesFiles)
     ::unlink((base + "/b.txt").c_str());
     ::unlink((base + "/c.log").c_str());
     ::rmdir(dir);
+}
+
+// ─── command substitution $( ) — splicing via the CommandRunner callback ─────
+TEST(Expander, CommandSubSplicesRunnerOutput)
+{
+    auto s = makeState();
+    shell::expander::CommandRunner fake =
+        [](const std::string&) { return std::string{"hi"}; };
+    auto pieces = shell::expander::Expand("$(x)", s, fake);
+    ASSERT_EQ(pieces.size(), 1u);
+    EXPECT_EQ(pieces.front(), "hi");
+}
+
+TEST(Expander, CommandSubEmbeddedInWord)
+{
+    auto s = makeState();
+    shell::expander::CommandRunner fake =
+        [](const std::string&) { return std::string{"hi"}; };
+    auto pieces = shell::expander::Expand("a$(x)b", s, fake);
+    ASSERT_EQ(pieces.size(), 1u);
+    EXPECT_EQ(pieces.front(), "ahib");
+}
+
+TEST(Expander, CommandSubPassesInnerText)
+{
+    auto s = makeState();
+    std::string seen;
+    shell::expander::CommandRunner fake =
+        [&seen](const std::string& text)
+    {
+        seen = text;
+        return std::string{};
+    };
+    shell::expander::Expand("$(echo a b)", s, fake);
+    EXPECT_EQ(seen, "echo a b");
+}
+
+TEST(Expander, CommandSubNestedParensKeptWhole)
+{
+    auto s = makeState();
+    std::string seen;
+    shell::expander::CommandRunner fake =
+        [&seen](const std::string& text)
+    {
+        seen = text;
+        return std::string{};
+    };
+    shell::expander::Expand("$(echo (nested))", s, fake);
+    EXPECT_EQ(seen, "echo (nested)"); // inner parens balanced, kept
+}
+
+TEST(Expander, CommandSubUnterminatedThrows)
+{
+    auto s = makeState();
+    EXPECT_THROW(expand1("$(foo", s), parser::ParserException);
+}
+
+// ─── special parameters $? and $$ ────────────────────────────────────────────
+TEST(Expander, LastExitCodeExpands)
+{
+    auto s = makeState();
+    s->SetLastCommandExitCode(7);
+    EXPECT_EQ(expand1("$?", s), "7");
+}
+
+TEST(Expander, LastExitCodeDefaultsZero)
+{
+    auto s = makeState();
+    EXPECT_EQ(expand1("$?", s), "0");
+}
+
+TEST(Expander, ShellPidExpands)
+{
+    auto s = makeState();
+    EXPECT_EQ(expand1("$$", s), std::to_string(s->GetShellPid()));
+}
+
+TEST(Expander, ExitCodeEmbeddedInWord)
+{
+    auto s = makeState();
+    s->SetLastCommandExitCode(3);
+    EXPECT_EQ(expand1("rc=$?.", s), "rc=3.");
 }

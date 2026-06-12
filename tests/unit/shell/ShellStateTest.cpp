@@ -170,7 +170,7 @@ TEST(ShellState, LastExitCodeDefaultsZero)
 TEST(ShellState, SetLastExitCode)
 {
     auto s = make();
-    s.SetLastExitCode(42);
+    s.SetLastCommandExitCode(42);
     EXPECT_EQ(s.GetLastCommandExitCode(), 42);
 }
 
@@ -252,5 +252,5 @@ TEST(ShellState, UnsetFunctionRemoves)
 TEST(ShellState, PidIsPositive)
 {
     auto s = make();
-    EXPECT_GT(s.GetPid(), 0);
+    EXPECT_GT(s.GetShellPid(), 0);
 }

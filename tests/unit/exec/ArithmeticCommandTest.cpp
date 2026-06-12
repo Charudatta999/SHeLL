@@ -23,7 +23,9 @@ namespace
 int runOn(const std::string& src, std::unique_ptr<shell::ShellState>& state)
 {
     auto disp = std::make_unique<builtins::BuiltinDispatcher>();
-    exec::Executor exec(state, disp);
+    shell::expander::CommandRunner stubRunner =
+        [](const std::string&) { return std::string{}; };
+    exec::Executor exec(state, disp, stubRunner);
 
     parser::Tokenizer tok(src);
     parser::Parser    p(tok.Tokenize());

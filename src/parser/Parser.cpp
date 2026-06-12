@@ -104,12 +104,17 @@ const Token& Parser::Expect(TokenType type, const char* context)
     if (!Check(type))
     {
         const Token& got = Peek();
-        throw ParserException(std::string("expected ") +
-                                  std::string(tokenTypeName(type)) +
-                                  " " + context + ", got '" +
-                                  got.value + "'",
-                              got.line,
-                              got.col);
+        const std::string message = std::string("expected ") +
+                                    std::string(tokenTypeName(type)) +
+                                    " " + context + ", got '" +
+                                    got.value + "'";
+        // Ran out of input while expecting more -> the REPL can fix
+        // this by reading another line; a mid-stream mismatch can't.
+        if (got.type == TokenType::Eof)
+        {
+            throw IncompleteInputException(message, got.line, got.col);
+        }
+        throw ParserException(message, got.line, got.col);
     }
     return Advance();
 }
@@ -255,6 +260,14 @@ std::unique_ptr<ast::AstNode> Parser::ParseSimpleCommand()
     if (argv.empty() && redirects.empty() && assignments.empty())
     {
         const Token& bad = Peek();
+        // e.g. "echo a &&" then end of line: a command must follow,
+        // so another line can complete it.
+        if (bad.type == TokenType::Eof)
+        {
+            throw IncompleteInputException("unexpected end of input",
+                                           bad.line,
+                                           bad.col);
+        }
         throw ParserException("unexpected token '" + bad.value + "'",
                               bad.line,
                               bad.col);
@@ -395,6 +408,12 @@ std::unique_ptr<ast::AstNode> Parser::ParseList()
         if (!separator)
         {
             const Token& got = Peek();
+            if (got.type == TokenType::Eof)
+            {
+                throw IncompleteInputException("unexpected end of input",
+                                               got.line,
+                                               got.col);
+            }
             throw ParserException(
                 std::string("unexpected token '") + got.value + "'",
                 got.line,
@@ -415,9 +434,15 @@ std::unique_ptr<ast::AstNode> Parser::ExpectList(const char* context)
     if (AtEnd() || IsListTerminator(Peek().type))
     {
         const Token& bad = Peek();
-        throw ParserException(std::string("expected command ") + context,
-                              bad.line,
-                              bad.col);
+        const std::string message =
+            std::string("expected command ") + context;
+        // "if true; then" + end of line -> body can arrive on the
+        // next line; a terminator like "fi" right here cannot be fixed.
+        if (bad.type == TokenType::Eof)
+        {
+            throw IncompleteInputException(message, bad.line, bad.col);
+        }
+        throw ParserException(message, bad.line, bad.col);
     }
     return ParseList();
 }
