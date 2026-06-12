@@ -64,18 +64,49 @@ int Repl::Run()
 {
 
     std::string line;
+    std::string buffer; // accumulates lines of one incomplete command
     while (m_state_->IsRunning())
     {
-        auto finishedJobs = m_state_->GetJobs()->Reap();
-        for (auto& job : finishedJobs)
+        if (buffer.empty())
         {
-            std::cout << "[" << job.id << "]+ Done " << job.command
-                      << "\n";
+            auto finishedJobs = m_state_->GetJobs()->Reap();
+            for (auto& job : finishedJobs)
+            {
+                std::cout << "[" << job.id << "]+ Done "
+                          << job.command << "\n";
+            }
+            PrintPrompt();
         }
-        PrintPrompt();
+        else
+        {
+            std::cout << "> " << std::flush; // PS2: continuation
+        }
         if (!ReadLine(line))
+        {
+            if (!buffer.empty())
+            {
+                // Ctrl-D mid-continuation: drop the partial command,
+                // report, and keep the shell alive.
+                std::cout << "unexpected end of input\n";
+                buffer.clear();
+                std::cin.clear();
+                continue;
+            }
             break;
-        EvalLine(line);
+        }
+        if (!buffer.empty())
+            buffer += '\n'; // newline is a command separator
+        buffer += line;
+
+        try
+        {
+            EvalLine(buffer);
+            buffer.clear();
+        }
+        catch (const parser::IncompleteInputException&)
+        {
+            // valid so far, just ends too early -> keep reading
+        }
     }
     return m_state_->GetShellExitCode();
 }
@@ -108,6 +139,10 @@ int Repl::EvalLine(const std::string& line)
     {
         m_state_->SetLastCommandExitCode(1);
         std::cout << ex.what() << "\n";
+    }
+    catch (const parser::IncompleteInputException&)
+    {
+        throw; // Run() keeps reading lines (PS2); not an error yet
     }
     catch (const parser::ParserException& ex)
     {

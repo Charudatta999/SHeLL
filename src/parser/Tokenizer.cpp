@@ -78,9 +78,8 @@ Token Tokenizer::ReadSingleQuoted()
         value += Advance();
 
     if (AtEnd())
-        throw std::runtime_error(
-            "unterminated single-quoted string at line " +
-            std::to_string(tokLine));
+        throw IncompleteInputException(
+            "unterminated single-quoted string", tokLine, tokCol);
     Advance(); // closing '
     return Token{.type = TokenType::SingleQuoted,
                  .value = std::move(value),
@@ -111,9 +110,8 @@ Token Tokenizer::ReadDoubleQuoted()
     }
 
     if (AtEnd())
-        throw std::runtime_error(
-            "unterminated double-quoted string at line " +
-            std::to_string(tokLine));
+        throw IncompleteInputException(
+            "unterminated double-quoted string", tokLine, tokCol);
     Advance(); // closing "
     return Token{.type = TokenType::DoubleQuoted,
                  .value = value,
@@ -271,7 +269,7 @@ Token Tokenizer::ReadWord()
                 }
                 if (depth != 0)
                 {
-                    throw ParserException(
+                    throw IncompleteInputException(
                         "unterminated command substitution");
                 }
             }
@@ -390,8 +388,9 @@ const std::string Tokenizer::ReadArithmeticBody()
     }
 
     if (AtEnd())
-        throw std::runtime_error("unterminated (( string at line " +
-                                 std::to_string(tokLine));
+        throw IncompleteInputException("unterminated (( expression",
+                                       tokLine,
+                                       0);
     return value;
 }
 
