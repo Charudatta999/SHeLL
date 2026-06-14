@@ -23,15 +23,25 @@ struct BuiltinContext
 
 int Cd(const std::vector<std::string>& argv,
        std::unique_ptr<BuiltinContext>& ctx);
+
 [[maybe_unused]]
 int Echo(const std::vector<std::string>& argv,
          std::unique_ptr<BuiltinContext>& ctx);
+
 int Exit(const std::vector<std::string>& argv,
          std::unique_ptr<BuiltinContext>& ctx);
+
 [[maybe_unused]]
 int Pwd(const std::vector<std::string>& argv,
         std::unique_ptr<BuiltinContext>& ctx);
+
 int Jobs(const std::vector<std::string>& /*argv*/,
          std::unique_ptr<BuiltinContext>& ctx);
+
+int Fg(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
+
+int Bg(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
+
+int Wait(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
 } // namespace builtins
 #endif // BUILTIN_BUILTIN_FUNCTION_HPP

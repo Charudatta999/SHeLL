@@ -1,14 +1,9 @@
 #include "exec/ForkRunner.hpp"
 
-#include "exec/WaitStatus.hpp"
+
 #include "utils/ErrorCodes.hpp"
 #include <sys/types.h>
 #include <unistd.h>
-
-namespace
-{
-constexpr int SIGNAL_EXIT_BASE = 128;
-}
 
 namespace exec
 {
@@ -47,7 +42,7 @@ void ForkRunner::Start(const std::function<int()>& childFn)
     m_running_ = true;
 }
 
-int ForkRunner::Run(const std::function<int()>& childFn, bool background)
+int ForkRunner::Run(const std::function<int()>& childFn, WaitMode mode)
 {
     Start(childFn);
     if (m_pid_ < 0)
@@ -55,13 +50,13 @@ int ForkRunner::Run(const std::function<int()>& childFn, bool background)
         m_exitCode_ = -1;
         return m_exitCode_;
     }
-    return Wait(background);
+    return Wait(mode);
 }
 
-int ForkRunner::Wait(bool background)
+int ForkRunner::Wait(WaitMode mode)
 {
 
-    WaitStatus wait(m_pid_, background);
+    WaitStatus wait(m_pid_, mode);
     if (wait.IsRunning())
     {
         m_running_ = true;

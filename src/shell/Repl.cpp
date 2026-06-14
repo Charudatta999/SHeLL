@@ -5,13 +5,16 @@
 #include "exec/CaptureOutput.hpp"
 #include "exec/ExecException.hpp"
 #include "exec/Executor.hpp"
+#include "io/FdOps.hpp"
 #include "parser/Parser.hpp"
 #include "parser/ParserException.hpp"
 #include "parser/Tokenizer.hpp"
 #include "shell/JobTable.hpp"
 #include "shell/ShellState.hpp"
+#include "signals/Sigchld.hpp"
+#include "signals/SignalManager.hpp"
 
-#include <cstddef>
+#include <csignal>
 #include <iostream>
 #include <map>
 #include <ostream>
@@ -62,6 +65,17 @@ Repl::~Repl() = default;
 
 int Repl::Run()
 {
+    // Job control only when we're an interactive shell on a real
+    // terminal. A piped/redirected stdin (scripts, tests) must not
+    // ignore stop signals or grab terminal control — doing so would
+    // SIGTTOU-stop the process the moment it writes output.
+    if (isatty(STDIN_FILENO))
+    {
+        setpgid(0, 0);
+        tcsetpgrp(STDIN_FILENO, getpgrp());
+        m_state_->GetSignalMgr()->SetupInteractiveSignals();
+        m_state_->EnableJobControl(true);
+    }
 
     std::string line;
     std::string buffer; // accumulates lines of one incomplete command
@@ -69,17 +83,24 @@ int Repl::Run()
     {
         if (buffer.empty())
         {
-            auto finishedJobs = m_state_->GetJobs()->Reap();
-            for (auto& job : finishedJobs)
+            auto jobEvents = m_state_->GetJobs()->Reap();
+            for (auto& event : jobEvents)
             {
-                std::cout << "[" << job.id << "]+ Done "
-                          << job.command << "\n";
+                std::string word =
+                    (event.state == JobTable::State::Stopped)
+                        ? "Stopped"
+                        : "Done";
+                std::string out = "[" + std::to_string(event.id) +
+                                  "]+ " + word + " " + event.command +
+                                  "\n";
+                io::fdops::WriteAll(STDOUT_FILENO, out);
             }
             PrintPrompt();
         }
         else
         {
-            std::cout << "> " << std::flush; // PS2: continuation
+            std::string out = "> "; // continuation
+            io::fdops::WriteAll(STDOUT_FILENO, out);
         }
         if (!ReadLine(line))
         {
@@ -87,7 +108,8 @@ int Repl::Run()
             {
                 // Ctrl-D mid-continuation: drop the partial command,
                 // report, and keep the shell alive.
-                std::cout << "unexpected end of input\n";
+                std::string out = "unexpected end of input \n";
+                io::fdops::WriteAll(STDOUT_FILENO, out);
                 buffer.clear();
                 std::cin.clear();
                 continue;
@@ -113,12 +135,56 @@ int Repl::Run()
 
 void Repl::PrintPrompt()
 {
-    std::cout << "$" << std::flush;
+    std::string out;
+
+    std::string sigil = getuid() ? "$" : "#";
+    out = "[" + m_state_->GetVar("USER").value_or("") + "@" +
+          m_state_->GetCWD() + "]" + sigil;
+
+    io::fdops::WriteAll(STDOUT_FILENO, out);
 }
 
 bool Repl::ReadLine(std::string& line)
 {
-    return static_cast<bool>(std::getline(std::cin, line));
+    line.clear();
+    io::fdops::ReadResult res = io::fdops::ReadResult::Ok;
+    while (true)
+    {
+        char chr;
+        res = io::fdops::ReadByte(STDIN_FILENO, chr);
+        if (res == io::fdops::ReadResult::Interrupted)
+        {
+            if (signals::Sigchld::Consume())
+            {
+                auto jobEvents = m_state_->GetJobs()->Reap();
+                for (auto& event : jobEvents)
+                {
+                    std::string word =
+                        (event.state == JobTable::State::Stopped)
+                            ? "Stopped"
+                            : "Done";
+                    std::string out = "[" + std::to_string(event.id) +
+                                      "]+ " + word + " " +
+                                      event.command + "\n";
+                    io::fdops::WriteAll(STDOUT_FILENO, out);
+                }
+                PrintPrompt();
+                continue;
+            }
+        }
+        if (res == io::fdops::ReadResult::Ok)
+        {
+            if (chr == '\n')
+                return true;
+            line += chr;
+        }
+        if (res == io::fdops::ReadResult::Eof ||
+            res == io::fdops::ReadResult::Error)
+        {
+            return false;
+        }
+    }
+    return false;
 }
 
 int Repl::EvalLine(const std::string& line)
@@ -138,7 +204,8 @@ int Repl::EvalLine(const std::string& line)
     catch (const exec::ExecException& ex)
     {
         m_state_->SetLastCommandExitCode(1);
-        std::cout << ex.what() << "\n";
+        std::string out = std::string(ex.what()) + "\n";
+        io::fdops::WriteAll(STDOUT_FILENO, out);
     }
     catch (const parser::IncompleteInputException&)
     {
@@ -147,12 +214,14 @@ int Repl::EvalLine(const std::string& line)
     catch (const parser::ParserException& ex)
     {
         m_state_->SetLastCommandExitCode(2);
-        std::cout << ex.what() << "\n";
+        std::string out = std::string(ex.what()) + "\n";
+        io::fdops::WriteAll(STDOUT_FILENO, out);
     }
     catch (const arithmetic::ArithmeticException& ex)
     {
         m_state_->SetLastCommandExitCode(1);
-        std::cout << ex.what() << "\n";
+        std::string out = std::string(ex.what()) + "\n";
+        io::fdops::WriteAll(STDOUT_FILENO, out);
     }
     return 1;
 }

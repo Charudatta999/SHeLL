@@ -1,5 +1,7 @@
 #include "builtins/BuiltInFunction.hpp"
-#include "shell/JobTable.hpp"   // List() returns const vector<Job>&
+
+#include "io/FdOps.hpp"
+#include "shell/JobTable.hpp"
 #include <string>
 #include <unistd.h>
 
@@ -10,9 +12,9 @@ int Jobs(const std::vector<std::string>& /*argv*/, std::unique_ptr<BuiltinContex
     for (const auto& job : jobs)
     {
         std::string line = "[" + std::to_string(job.id) + "] "
-                         + (job.running ? "Running" : "Done") + "  "
+                         + (job.state == shell::JobTable::State::Running ? "Running" : "Stopped") + "  "
                          + job.command + "\n";
-        write(ctx->outFd, line.c_str(), line.size());
+        io::fdops::WriteAll(ctx->outFd, line);
     }
     return 0;
 }

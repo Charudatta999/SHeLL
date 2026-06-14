@@ -1,9 +1,14 @@
 #ifndef EXEC_FORKRUNNER_HPP
 #define EXEC_FORKRUNNER_HPP
+
+#include "exec/WaitStatus.hpp"
+
 #include <functional>
 #include <sys/types.h>
+
 namespace exec
 {
+
 class ForkRunner
 {
 public:
@@ -15,7 +20,7 @@ public:
     ForkRunner& operator=(ForkRunner&&) = delete;
 
     [[nodiscard]]
-    int  Run(const std::function<int()>& childFn, bool background = false);
+    int Run(const std::function<int()>& childFn, WaitMode mode = WaitMode::Foreground);
 
     [[nodiscard]]
     pid_t Pid() const;
@@ -27,8 +32,9 @@ public:
     int ExitCode() const;
 
     void Start(const std::function<int()>& childFn);
+
 private:
-    int  Wait( bool background = false);
+    int Wait(WaitMode mode);
     pid_t m_pid_;
     bool m_running_;
     int m_exitCode_;

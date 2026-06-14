@@ -8,6 +8,7 @@
 	],
 	"remoteUser": "vscode",
 	"updateRemoteUserUID": true,
+	"postCreateCommand": "grep -q CMAKE_BUILD_PARALLEL_LEVEL ~/.bashrc || echo 'export CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)' >> ~/.bashrc",
 	"customizations": {
 		"vscode": {
 			"settings": {

@@ -10,6 +10,10 @@
 #include "io/FdOps.hpp"
 
 #include <unistd.h>
+namespace
+{
+    const int BUFFER_SIZE = 4096;
+}
 
 namespace exec
 {
@@ -23,30 +27,31 @@ std::string CaptureOutput(
     auto runner = ForkRunner();
     auto childFn = [&]() -> int
     {
-        if(!io::fdops::Dup2(*pipe.GetWritePipeFD(), 1))
+        if(!io::fdops::Dup2(*pipe.GetWritePipeFD(), STDOUT_FILENO))
         {
             return 1;
         }
         pipe.CloseReadFD();
         pipe.CloseWriteFD();
-        exec::Executor executor(state, dispatcher, cmdRunner);
+        state->EnableJobControl(false);
+        exec::Executor executor(state, dispatcher, cmdRunner,STDERR_FILENO );
         return executor.Run(root);
     };
     runner.Start(childFn);
     pipe.CloseWriteFD();
 
     std::string output;
-    char buffer[4096];
+    std::array<char, BUFFER_SIZE> buffer;
     ssize_t bytesRead = 0;
     int readFd = pipe.GetReadPipeFD()->GetFD();
-    while ((bytesRead = read(readFd, buffer, sizeof(buffer))) > 0)
+    while ((bytesRead = read(readFd, buffer.data(), sizeof(buffer))) > 0)
     {
-        output.append(buffer, static_cast<std::size_t>(bytesRead));
+        output.append(buffer.data(), static_cast<std::size_t>(bytesRead));
     }
     pipe.CloseReadFD();
 
     // Read to EOF first, wait last — never the other way around.
-    WaitStatus status(runner.Pid());
+    WaitStatus status(runner.Pid(),exec::WaitMode::UntilExit);
 
     while (!output.empty() && output.back() == '\n')
     {
