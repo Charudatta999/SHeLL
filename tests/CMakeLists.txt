@@ -19,6 +19,7 @@ add_executable(shell_tests
     unit/exec/CommandSpecTest.cpp
     unit/exec/ForkRunnerTest.cpp
     unit/exec/WaitStatusTest.cpp
+    unit/exec/TaskTest.cpp
     unit/exec/RedirectionTest.cpp
     unit/exec/PipelineTest.cpp
     unit/exec/CaptureOutputTest.cpp

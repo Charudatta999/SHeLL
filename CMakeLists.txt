@@ -144,6 +144,11 @@ add_library(shell_core STATIC
     src/builtins/Fg.cpp
     src/builtins/Wait.cpp
 
+    # --- Coroutines ---
+    src/coro/Task.cpp
+    src/coro/TaskPromise.cpp
+    src/coro/FinalAwaiter.cpp
+
     # --- Signals ---
     src/signals/SignalManager.cpp
     src/signals/SignalGuard.cpp
