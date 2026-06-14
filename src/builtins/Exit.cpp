@@ -1,6 +1,5 @@
 #include "builtins/BuiltInFunction.hpp"
 
-#include <cstdlib>
 #include <string>
 #include <unistd.h>
 

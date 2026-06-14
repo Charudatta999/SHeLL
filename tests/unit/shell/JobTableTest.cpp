@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "shell/JobTable.hpp"
+#include "shell/ShellException.hpp"
 
 namespace
 {
@@ -90,9 +91,35 @@ TEST(JobTable, ReapLeavesRunningJob)
     auto finished = table.Reap(); // immediate poll — still running
     EXPECT_TRUE(finished.empty());
     ASSERT_EQ(table.List().size(), 1u);
-    EXPECT_TRUE(table.List()[0].running);
+    EXPECT_EQ(table.List()[0].state, shell::JobTable::State::Running);
 
     // cleanup: kill and reap directly so no zombie leaks
+    ::kill(pid, SIGKILL);
+    ::waitpid(pid, nullptr, 0);
+}
+
+TEST(JobTable, ReapMarksStoppedJobWithoutRemoving)
+{
+    shell::JobTable table;
+    pid_t pid = spawnSleeping();
+    table.Add(pid, "sleeper");
+
+    ::kill(pid, SIGSTOP);
+    // Poll until the stop is observed (signal delivery is async).
+    for (int attempt = 0; attempt < 500; ++attempt)
+    {
+        table.Reap();
+        if (table.List()[0].state == shell::JobTable::State::Stopped)
+            break;
+        ::usleep(1000);
+    }
+
+    ASSERT_EQ(table.List().size(), 1u); // stopped, NOT reaped away
+    EXPECT_EQ(table.List()[0].state, shell::JobTable::State::Stopped);
+    EXPECT_TRUE(table.Reap().empty()); // still not collectable
+
+    // cleanup: resume, kill, reap directly so no zombie leaks
+    ::kill(pid, SIGCONT);
     ::kill(pid, SIGKILL);
     ::waitpid(pid, nullptr, 0);
 }
@@ -102,4 +129,58 @@ TEST(JobTable, EmptyTableReapIsEmpty)
     shell::JobTable table;
     EXPECT_TRUE(table.Reap().empty());
     EXPECT_TRUE(table.List().empty());
+}
+
+// ─── FindById / UpdateJobState / RemoveByID (no fork needed) ──────────────────
+TEST(JobTable, FindByIdReturnsMatchingJob)
+{
+    shell::JobTable table;
+    table.Add(1111, "a");
+    int id = table.Add(2222, "b");
+
+    auto& job = table.FindById(id);
+    EXPECT_EQ(job.id, id);
+    EXPECT_EQ(job.pid, 2222);
+    EXPECT_EQ(job.command, "b");
+}
+
+TEST(JobTable, FindByIdThrowsWhenMissing)
+{
+    shell::JobTable table;
+    table.Add(1111, "a");
+    EXPECT_THROW((void)table.FindById(99), shell::ShellException);
+}
+
+TEST(JobTable, UpdateJobStateChangesStateById)
+{
+    shell::JobTable table;
+    int id = table.Add(1234, "sleeper"); // defaults to Running
+    ASSERT_EQ(table.List()[0].state, shell::JobTable::State::Running);
+
+    table.UpdateJobState(id, shell::JobTable::State::Stopped);
+    EXPECT_EQ(table.FindById(id).state, shell::JobTable::State::Stopped);
+
+    table.UpdateJobState(id, shell::JobTable::State::Running);
+    EXPECT_EQ(table.FindById(id).state, shell::JobTable::State::Running);
+}
+
+TEST(JobTable, RemoveByIdErasesOnlyThatJob)
+{
+    shell::JobTable table;
+    int first  = table.Add(1111, "a");
+    int second = table.Add(2222, "b");
+
+    table.RemoveByID(first);
+
+    ASSERT_EQ(table.List().size(), 1u);
+    EXPECT_EQ(table.List()[0].id, second);
+    EXPECT_THROW((void)table.FindById(first), shell::ShellException);
+}
+
+TEST(JobTable, RemoveByIdMissingIsNoop)
+{
+    shell::JobTable table;
+    table.Add(1111, "a");
+    table.RemoveByID(99); // not present
+    EXPECT_EQ(table.List().size(), 1u);
 }

@@ -12,7 +12,10 @@ namespace parser::ast
 {
     class AstNode;
 }
-
+namespace signals
+{
+    class SignalManager;
+}
 namespace shell
 {
 class JobTable;
@@ -55,7 +58,7 @@ public:
     [[nodiscard]]
     std::map<std::string, std::string> GetEnv() const;
 
-    // exit code releated
+    // exit code related
     [[nodiscard]]
     int GetLastCommandExitCode() const;
 
@@ -89,6 +92,11 @@ public:
     void RequestExit(int exitCode) noexcept;
     std::unique_ptr<JobTable>& GetJobs();
 
+    void EnableJobControl(bool enable);
+    bool IsJobControlEnabled() const ;
+
+    const std::unique_ptr<signals::SignalManager>& GetSignalMgr();
+
 private:
     std::string m_cwd_;
     std::map<std::string, std::string> m_vars_;
@@ -100,6 +108,8 @@ private:
     int m_shellExitCode_;
     std::map<std::string, std::unique_ptr<parser::ast::AstNode>> m_functions_;
     std::unique_ptr<JobTable> m_jobsTable_;
+    bool m_jobControl_;
+    std::unique_ptr<signals::SignalManager> m_sigMgr_;
 };
 } // namespace shell
 #endif // SHELL_SHELL_STATE_HPP

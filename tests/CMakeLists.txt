@@ -8,6 +8,8 @@ include(GoogleTest)
 # Define the unit testing executable
 add_executable(shell_tests
     unit/io/PipeTest.cpp
+    unit/io/FdOpsReadByteTest.cpp
+    unit/signals/SigchldTest.cpp
     unit/parser/TokenTest.cpp
     unit/parser/ParserTest.cpp
     unit/parser/AstPrinterTest.cpp
@@ -16,6 +18,10 @@ add_executable(shell_tests
     unit/shell/JobTableTest.cpp
     unit/exec/CommandSpecTest.cpp
     unit/exec/ForkRunnerTest.cpp
+    unit/exec/WaitStatusTest.cpp
+    unit/exec/RedirectionTest.cpp
+    unit/exec/PipelineTest.cpp
+    unit/exec/CaptureOutputTest.cpp
     unit/exec/ExecutorTest.cpp
     unit/exec/ArithmeticCommandTest.cpp
     unit/arithmetic/ArithmeticEngineTest.cpp

@@ -3,6 +3,7 @@
 #include "parser/ast/commands/Function.hpp"
 #include "shell/JobTable.hpp"
 #include "shell/ShellException.hpp"
+#include "signals/SignalManager.hpp"
 #include "utils/ErrorCodes.hpp"
 
 #include <filesystem>
@@ -25,6 +26,10 @@ ShellState::ShellState(
     , m_shellExitCode_{0}
     , m_functions_{}
     , m_jobsTable_(std::make_unique<JobTable>())
+    // Off until an interactive, tty-owning shell turns it on in Repl::Run.
+    // Tests and non-interactive use must not attempt terminal handoff.
+    , m_jobControl_(false)
+    , m_sigMgr_(std::make_unique<signals::SignalManager>())
 {
 }
 
@@ -223,4 +228,18 @@ std::unique_ptr<JobTable>& ShellState::GetJobs()
     return m_jobsTable_;
 }
 
+void ShellState::EnableJobControl(bool enable)
+{
+    m_jobControl_ = enable;
+}
+
+bool ShellState::IsJobControlEnabled() const
+{
+    return m_jobControl_;
+}
+
+const std::unique_ptr<signals::SignalManager>& ShellState::GetSignalMgr()
+{
+    return m_sigMgr_;
+}
 } // namespace shell

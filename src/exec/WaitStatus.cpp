@@ -1,24 +1,22 @@
 #include "exec/WaitStatus.hpp"
 
 #include <cerrno>
-#include <cstdlib>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 namespace exec
 {
 
-WaitStatus::WaitStatus(pid_t pid, bool background)
+WaitStatus::WaitStatus(pid_t pid, WaitMode mode)
     : m_pid_(pid)
     , m_status_(-1)
-    , m_background_(background)
+    , m_waitMode_(mode)
     , m_running_(true)
 {
-    if (m_background_)
+    if (mode == WaitMode::Poll)
     {
         pid_t childPid{-1};
-        while ((childPid = waitpid(m_pid_, &m_status_, WNOHANG)) == -1 && errno == EINTR)
+        while ((childPid = waitpid(m_pid_, &m_status_, WNOHANG | WUNTRACED)) == -1 && errno == EINTR)
         {
         }
         if (childPid == 0)
@@ -35,9 +33,9 @@ WaitStatus::WaitStatus(pid_t pid, bool background)
             m_status_ = -1;
         }
     }
-    else
+    else if (mode == WaitMode::Foreground)
     {
-        while (waitpid(m_pid_, &m_status_, 0) == -1)
+        while (waitpid(m_pid_, &m_status_, WUNTRACED ) == -1)
         {
             if (errno != EINTR)
             {
@@ -46,6 +44,26 @@ WaitStatus::WaitStatus(pid_t pid, bool background)
             }
         }
         m_running_ = false;
+    }
+    else if(mode == WaitMode::UntilExit)
+    {
+        pid_t childPid{-1};
+        while ((childPid = waitpid(m_pid_, &m_status_, 0)) == -1 && errno == EINTR)
+        {
+        }
+        if (childPid == 0)
+        {
+            m_running_ = true;
+        }
+        else if (childPid == m_pid_)
+        {
+            m_running_ = false;
+        }
+        else
+        {
+            m_running_ = false;
+            m_status_ = -1;
+        }
     }
 }
 
@@ -92,6 +110,11 @@ bool WaitStatus::IsRunning() const
 
 bool WaitStatus::IsBackground() const
 {
-    return m_background_;
+    return m_waitMode_ == WaitMode::Poll;
+}
+
+bool WaitStatus::IsStopped() const
+{
+    return IsValid() && WIFSTOPPED(m_status_);
 }
 } // namespace exec

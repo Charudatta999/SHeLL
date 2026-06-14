@@ -140,6 +140,9 @@ add_library(shell_core STATIC
     src/builtins/Pwd.cpp
     src/builtins/Echo.cpp
     src/builtins/Jobs.cpp
+    src/builtins/Bg.cpp
+    src/builtins/Fg.cpp
+    src/builtins/Wait.cpp
 
     # --- Signals ---
     src/signals/SignalManager.cpp

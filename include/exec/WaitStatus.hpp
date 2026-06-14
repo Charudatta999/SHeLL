@@ -1,16 +1,24 @@
 #ifndef EXEC_WAIT_STATUS_HPP
 #define EXEC_WAIT_STATUS_HPP
 
-#include <fcntl.h>
+#include <cstdint>
+#include <sys/types.h>
 
 namespace exec
 {
+enum class WaitMode : std::uint8_t
+{
+    Poll,
+    Foreground,
+    UntilExit
+};
 
 class WaitStatus
 {
 
 public:
-    explicit WaitStatus(pid_t pid, bool background = false);
+
+    explicit WaitStatus(pid_t pid, WaitMode mode);
     ~WaitStatus() = default;
 
     // Non-Moveable & Non-Copyable
@@ -41,10 +49,13 @@ public:
     [[nodiscard]]
     bool IsBackground() const;
 
+    [[nodiscard]]
+    bool IsStopped() const;
+
 private:
     pid_t m_pid_;
     int m_status_;
-    bool m_background_;
+    WaitMode m_waitMode_;
     bool m_running_;
 }; // class WaitStatus
 } // namespace exec
