@@ -60,7 +60,7 @@ private:
     std::vector<std::string>
     ExpandArgv(const std::vector<std::string>& argv);
     void RecordStoppedJob(PipelineResult result,
-                          const std::vector<CommandSpec>&);
+                          const std::string& commandText);
     void Announce(const std::string& line) const;
 
     std::unique_ptr<shell::ShellState>& m_state_;

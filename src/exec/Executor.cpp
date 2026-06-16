@@ -34,21 +34,6 @@
 
 namespace
 {
-std::string Join(const std::vector<std::string>& parts,
-                 const std::string& sep)
-{
-    std::string out;
-    for (const auto& part : parts)
-    {
-        if (!out.empty())
-        {
-            out += sep;
-        }
-        out += part;
-    }
-    return out;
-}
-
 // Sets a flag true for the duration of a scope, restores on exit.
 // Marks "we are inside a compound command" while a compound node is
 // being traversed (nests correctly).
@@ -97,7 +82,7 @@ Executor::BuildSpec(const std::vector<std::string>& argv,
 }
 
 void Executor::RecordStoppedJob(PipelineResult result,
-                                const std::vector<CommandSpec>& specs)
+                                const std::string& commandText)
 {
     if (result.state != exec::State::Stopped)
         return;
@@ -117,17 +102,10 @@ void Executor::RecordStoppedJob(PipelineResult result,
         return;
     }
 
-    std::vector<std::string> collectionStages;
-    for (auto const& spec : specs)
-    {
-        collectionStages.push_back(Join(spec.argv, " "));
-    }
-    auto command = Join(collectionStages, " | ");
-
     auto jobID = m_state_->GetJobs()->Add(
-        result.pgid, command, shell::JobTable::State::Stopped);
+        result.pgid, commandText, shell::JobTable::State::Stopped);
     std::string out = "[" + std::to_string(jobID) + "]+ Stopped " +
-                      command + "\n";
+                      commandText + "\n";
     Announce(out);
 }
 
@@ -187,7 +165,7 @@ void Executor::Visit(parser::ast::SimpleCommand& command)
             m_state_->IsJobControlEnabled() ? WaitMode::Foreground
                                             : WaitMode::UntilExit);
         m_status_ = result.status;
-        RecordStoppedJob(result, {spec});
+        RecordStoppedJob(result, command.SourceText());
     }
 }
 
@@ -210,7 +188,7 @@ void Executor::Visit(parser::ast::Pipeline& pipeline)
         m_state_->IsJobControlEnabled() ? WaitMode::Foreground
                                         : WaitMode::UntilExit);
     m_status_ = result.status;
-    RecordStoppedJob(result, specs);
+    RecordStoppedJob(result, pipeline.SourceText());
     if (pipeline.Bang())
         m_status_ = (m_status_ == 0) ? 1 : 0;
 }
@@ -252,7 +230,8 @@ void Executor::Visit(parser::ast::List& list)
                 {
                     setpgid(pid, pid); // parent half of the race-guarded setpgid
                     auto& jobTable = m_state_->GetJobs();
-                    auto id = jobTable->Add(pid, "cmd");
+                    auto id =
+                        jobTable->Add(pid, item.node->SourceText());
                     m_status_ = 0;
                     std::string err = "[" + std::to_string(id) +
                                       "] " + std::to_string(pid) +
