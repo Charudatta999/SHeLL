@@ -4,13 +4,16 @@
 #include "parser/ast/AstNode.hpp"
 
 #include <memory>
+
 namespace parser::ast
 {
 class AstVisitor;
+
 class Group final : public AstNode
 {
 public:
-    Group(std::unique_ptr<AstNode> body)  : m_body_(std::move(body)) {};
+    Group(std::unique_ptr<AstNode> body)
+        : m_body_(std::move(body)) {};
     ~Group() = default;
     Group(const Group&) = delete;
     Group& operator=(const Group&) = delete;
@@ -18,12 +21,18 @@ public:
     Group& operator=(Group&&) = delete;
 
     void Accept(AstVisitor& visitor) override;
+
     [[nodiscard]]
-    const std::unique_ptr<AstNode>& GetBody() const { return m_body_; }
+    coro::Task Accept(ExecVisitor& visitor) override;
+
+    [[nodiscard]]
+    const std::unique_ptr<AstNode>& GetBody() const
+    {
+        return m_body_;
+    }
 
 private:
     std::unique_ptr<AstNode> m_body_;
-
 };
 
 } // namespace parser::ast

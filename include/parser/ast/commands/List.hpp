@@ -33,6 +33,9 @@ public:
     void Accept(AstVisitor& visitor) override;
 
     [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
+    [[nodiscard]]
     const std::vector<Item>& GetItems() const
     {
         return m_items_;

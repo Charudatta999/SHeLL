@@ -2,7 +2,9 @@
 #define EXEC_EXECUTOR_HPP
 
 #include "exec/ExecHelpers.hpp"
-#include "parser/ast/AstVisitor.hpp"
+
+#include "coro/Task.hpp"
+#include "parser/ast/ExecVisitor.hpp"
 #include "shell/expander/Expander.hpp"
 
 #include <memory>
@@ -29,7 +31,7 @@ namespace exec
 {
 struct PipelineResult;
 
-class Executor : public parser::ast::AstVisitor
+class Executor : public parser::ast::ExecVisitor
 {
 public:
     explicit Executor(
@@ -41,18 +43,19 @@ public:
     int Run(const std::unique_ptr<parser::ast::AstNode>& root);
 
 private:
-    void Visit(parser::ast::SimpleCommand&) override;
-    void Visit(parser::ast::Pipeline&) override;
-    void Visit(parser::ast::List&) override;
-    void Visit(parser::ast::AndOr&) override;
-    void Visit(parser::ast::Subshell&) override;
-    void Visit(parser::ast::Group&) override;
-    void Visit(parser::ast::Function&) override;
-    void Visit(parser::ast::While&) override;
-    void Visit(parser::ast::For&) override;
-    void Visit(parser::ast::If&) override;
-    void Visit(parser::ast::Case&) override;
-    void Visit(parser::ast::ArithmeticCommand&) override;
+    coro::Task Visit(parser::ast::SimpleCommand&) override;
+    coro::Task Visit(parser::ast::Pipeline&) override;
+    coro::Task Visit(parser::ast::List&) override;
+    coro::Task Visit(parser::ast::AndOr&) override;
+    coro::Task Visit(parser::ast::Subshell&) override;
+    coro::Task Visit(parser::ast::Group&) override;
+    coro::Task Visit(parser::ast::Function&) override;
+    coro::Task Visit(parser::ast::While&) override;
+    coro::Task Visit(parser::ast::For&) override;
+    coro::Task Visit(parser::ast::If&) override;
+    coro::Task Visit(parser::ast::Case&) override;
+    coro::Task Visit(parser::ast::ArithmeticCommand&) override;
+
     [[nodiscard]]
     CommandSpec BuildSpec(const std::vector<std::string>& argv,
                           const parser::ast::SimpleCommand&) const;
@@ -62,6 +65,8 @@ private:
     void RecordStoppedJob(PipelineResult result,
                           const std::string& commandText);
     void Announce(const std::string& line) const;
+
+    int RunToCompletion(const std::unique_ptr<parser::ast::AstNode>& node);
 
     std::unique_ptr<shell::ShellState>& m_state_;
     std::unique_ptr<builtins ::BuiltinDispatcher>& m_builtins_;

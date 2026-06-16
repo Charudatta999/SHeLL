@@ -27,6 +27,9 @@ public:
     void Accept(AstVisitor& visitor) override;
 
     [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
+    [[nodiscard]]
     const std::vector<std::unique_ptr<AstNode>>& Stages() const
     {
         return m_stages_;

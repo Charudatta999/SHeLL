@@ -1,6 +1,7 @@
 #ifndef PARSER_AST_NODE_HPP
 #define PARSER_AST_NODE_HPP
 
+#include "coro/Task.hpp"
 #include <string>
 
 namespace parser::ast
@@ -8,6 +9,7 @@ namespace parser::ast
 
 // Forward Declare
 class AstVisitor;
+class ExecVisitor;
 
 class AstNode
 {
@@ -20,6 +22,8 @@ public:
     AstNode& operator=(AstNode&& astNode) = delete;
 
     virtual void Accept(AstVisitor& visitor) = 0;
+
+    virtual coro::Task Accept(ExecVisitor&) = 0;
 
     // Original source text of the command this node represents, set by
     // the parser from the consumed token range. Used for job display

@@ -19,6 +19,10 @@ public:
     ArithmeticCommand& operator=(ArithmeticCommand&&) = delete;
 
     void Accept(AstVisitor& visitor) override;
+
+    [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
     [[nodiscard]]
     const std::string& GetExpr() const
     {

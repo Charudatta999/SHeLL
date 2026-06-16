@@ -28,6 +28,9 @@ public:
     void Accept(AstVisitor& visitor) override;
 
     [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
+    [[nodiscard]]
     const std::string& GetName() const
     {
         return m_name_;

@@ -20,6 +20,10 @@ public:
     Subshell& operator=(Subshell&&) = delete;
 
     void Accept(AstVisitor& visitor) override;
+
+    [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
     [[nodiscard]]
     const std::unique_ptr<AstNode>& GetBody() const { return m_body_; }
 

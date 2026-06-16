@@ -41,11 +41,17 @@ struct CompoundScope
 {
     bool& flag;
     bool prev;
+
     explicit CompoundScope(bool& target) : flag(target), prev(target)
     {
         flag = true;
     }
-    ~CompoundScope() { flag = prev; }
+
+    ~CompoundScope()
+    {
+        flag = prev;
+    }
+
     CompoundScope(const CompoundScope&) = delete;
     CompoundScope& operator=(const CompoundScope&) = delete;
 };
@@ -68,8 +74,23 @@ Executor::Executor(
 
 int Executor::Run(const std::unique_ptr<parser::ast::AstNode>& root)
 {
-    root->Accept(*this);
-    return m_status_;
+    coro::Task task = root->Accept(*this);
+    task.GetHandle().resume();
+    auto& promise = task.GetHandle().promise();
+    if (auto excp = promise.Exception())
+        std::rethrow_exception(excp);
+    return promise.Result();
+}
+
+int Executor::RunToCompletion(
+    const std::unique_ptr<parser::ast::AstNode>& node)
+{
+    coro::Task task = node->Accept(*this);
+    task.GetHandle().resume();
+    auto& promise = task.GetHandle().promise();
+    if (auto excp = promise.Exception())
+        std::rethrow_exception(excp);
+    return promise.Result();
 }
 
 CommandSpec
@@ -87,23 +108,28 @@ void Executor::RecordStoppedJob(PipelineResult result,
     if (result.state != exec::State::Stopped)
         return;
 
-    // A stop inside a compound (&&, list, loop, if) can't be suspended
-    // as one job — the continuation lives on the shell's call stack, not
-    // in any process. Rather than record a half-job and silently drop
-    // the rest, resume the process and run it to completion.
+    // A stop inside a compound (&&, list, loop, if) can't be
+    // suspended as one job — the continuation lives on the shell's
+    // call stack, not in any process. Rather than record a half-job
+    // and silently drop the rest, resume the process and run it to
+    // completion.
     if (m_inCompound_)
     {
         kill(-result.pgid, SIGCONT);
         exec::WaitStatus done(result.pgid, exec::WaitMode::UntilExit);
-        m_status_ = done.Exited()     ? done.ExitCode()
-                    : done.Signaled() ? SIGNAL_EXIT_BASE + done.GetSignal()
-                                      : INVALID_STATUS;
-        Announce("shell: cannot suspend a compound command; resumed\n");
+        m_status_ = done.Exited() ? done.ExitCode()
+                    : done.Signaled()
+                        ? SIGNAL_EXIT_BASE + done.GetSignal()
+                        : INVALID_STATUS;
+        Announce(
+            "shell: cannot suspend a compound command; resumed\n");
         return;
     }
 
-    auto jobID = m_state_->GetJobs()->Add(
-        result.pgid, commandText, shell::JobTable::State::Stopped);
+    auto jobID =
+        m_state_->GetJobs()->Add(result.pgid,
+                                 commandText,
+                                 shell::JobTable::State::Stopped);
     std::string out = "[" + std::to_string(jobID) + "]+ Stopped " +
                       commandText + "\n";
     Announce(out);
@@ -128,7 +154,7 @@ Executor::ExpandArgv(const std::vector<std::string>& argv)
     return out;
 }
 
-void Executor::Visit(parser::ast::SimpleCommand& command)
+coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
 {
     auto argv = ExpandArgv(command.Argv());
 
@@ -142,12 +168,12 @@ void Executor::Visit(parser::ast::SimpleCommand& command)
                                         m_cmdRunner_)
                     .front());
         m_status_ = 0;
-        return;
+        co_return m_status_;
     }
     if (auto* body = m_state_->GetFunctionBody(argv[0]))
     {
-        body->Accept(*this);
-        return;
+        co_await body->Accept(*this);
+        co_return m_status_;
     }
     else if (m_builtins_->IsBuiltin(argv[0]))
     {
@@ -167,9 +193,10 @@ void Executor::Visit(parser::ast::SimpleCommand& command)
         m_status_ = result.status;
         RecordStoppedJob(result, command.SourceText());
     }
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::Pipeline& pipeline)
+coro::Task Executor::Visit(parser::ast::Pipeline& pipeline)
 {
     const auto& stages = pipeline.Stages();
     std::vector<CommandSpec> specs;
@@ -190,23 +217,27 @@ void Executor::Visit(parser::ast::Pipeline& pipeline)
     m_status_ = result.status;
     RecordStoppedJob(result, pipeline.SourceText());
     if (pipeline.Bang())
+    {
         m_status_ = (m_status_ == 0) ? 1 : 0;
+    }
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::Subshell& node)
+coro::Task Executor::Visit(parser::ast::Subshell& node)
 {
     ForkRunner runner;
     m_status_ = runner.Run(
         [&]
         {
-            node.GetBody()->Accept(*this);
+            RunToCompletion(node.GetBody());
             return m_status_;
         },
         m_state_->IsJobControlEnabled() ? WaitMode::Foreground
                                         : WaitMode::Poll);
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::List& list)
+coro::Task Executor::Visit(parser::ast::List& list)
 {
     CompoundScope scope(m_inCompound_);
     const auto& items = list.GetItems();
@@ -218,17 +249,20 @@ void Executor::Visit(parser::ast::List& list)
             int errCode = runner.Run(
                 [&]
                 {
-                    setpgid(0, 0); // own group -> kill(-pgid) reaches it
+                    setpgid(0,
+                            0); // own group -> kill(-pgid) reaches it
                     m_state_->EnableJobControl(false);
-                    item.node->Accept(*this);
+                    RunToCompletion(item.node);
                     return m_status_;
-                }, WaitMode::Poll);
+                },
+                WaitMode::Poll);
             if (errCode == PROCESS_RUNNING)
             {
                 pid_t pid = runner.Pid();
                 if (pid > 0)
                 {
-                    setpgid(pid, pid); // parent half of the race-guarded setpgid
+                    setpgid(pid, pid); // parent half of the
+                                       // race-guarded setpgid
                     auto& jobTable = m_state_->GetJobs();
                     auto id =
                         jobTable->Add(pid, item.node->SourceText());
@@ -242,39 +276,42 @@ void Executor::Visit(parser::ast::List& list)
         }
         else
         {
-            item.node->Accept(*this);
+            co_await item.node->Accept(*this);
         }
     }
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::AndOr& command)
+coro::Task Executor::Visit(parser::ast::AndOr& command)
 {
     CompoundScope scope(m_inCompound_);
-    command.Lhs()->Accept(*this);
+    co_await  command.Lhs()->Accept(*this);
     if ((m_status_ == 0 &&
          (command.Operator() == parser::ast::AndOr::Op::And)))
     {
-        command.Rhs()->Accept(*this);
+        co_await  command.Rhs()->Accept(*this);
     }
     else if (m_status_ != 0 &&
              (command.Operator() == parser::ast::AndOr::Op::Or))
     {
-        command.Rhs()->Accept(*this);
+        co_await  command.Rhs()->Accept(*this);
     }
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::Group& group)
+coro::Task Executor::Visit(parser::ast::Group& group)
 {
     CompoundScope scope(m_inCompound_);
-    group.GetBody()->Accept(*this);
+    co_await group.GetBody()->Accept(*this);
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::While& condi)
+coro::Task Executor::Visit(parser::ast::While& condi)
 {
     CompoundScope scope(m_inCompound_);
     while (true)
     {
-        condi.GetCondition()->Accept(*this);
+        co_await  condi.GetCondition()->Accept(*this);
         bool keepGoing = (m_status_ == 0);
         if (condi.IsUntil())
         {
@@ -284,41 +321,44 @@ void Executor::Visit(parser::ast::While& condi)
         {
             break;
         }
-        condi.GetBody()->Accept(*this);
+        co_await condi.GetBody()->Accept(*this);
     }
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::For& loop)
+coro::Task Executor::Visit(parser::ast::For& loop)
 {
     CompoundScope scope(m_inCompound_);
     const auto& words = loop.GetWords();
     for (const auto& word : words)
     {
         m_state_->SetVar(loop.GetVar(), word);
-        loop.GetBody()->Accept(*this);
+        co_await  loop.GetBody()->Accept(*this);
     }
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::If& condi)
+coro::Task Executor::Visit(parser::ast::If& condi)
 {
     CompoundScope scope(m_inCompound_);
     const auto& branches = condi.GetBranches();
     for (const auto& branch : branches)
     {
-        branch.condition->Accept(*this);
+        co_await  branch.condition->Accept(*this);
         if (m_status_ == 0)
         {
-            branch.body->Accept(*this);
-            return;
+            co_await  branch.body->Accept(*this);
+            co_return m_status_;
         }
     }
     if (condi.GetElseBody())
     {
-        condi.GetElseBody()->Accept(*this);
+        co_await condi.GetElseBody()->Accept(*this);
     }
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::Case& case_)
+coro::Task Executor::Visit(parser::ast::Case& case_)
 {
     CompoundScope scope(m_inCompound_);
     const auto& word = case_.GetWord();
@@ -330,20 +370,25 @@ void Executor::Visit(parser::ast::Case& case_)
             if (fnmatch(pattern.c_str(), word.c_str(), 0) == 0)
             {
                 if (arm.body != nullptr)
-                    arm.body->Accept(*this);
-                return;
+                {
+                    co_await arm.body->Accept(*this);
+                }
+                co_return m_status_;
+                ;
             }
         }
     }
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::Function& node)
+coro::Task Executor::Visit(parser::ast::Function& node)
 {
     m_state_->AddFunction(node.GetName(), node.ReleaseBody());
     m_status_ = 0;
+    co_return m_status_;
 }
 
-void Executor::Visit(parser::ast::ArithmeticCommand& node)
+coro::Task Executor::Visit(parser::ast::ArithmeticCommand& node)
 {
     shell::ShellArithmeticVars adapter(m_state_);
     try
@@ -351,11 +396,13 @@ void Executor::Visit(parser::ast::ArithmeticCommand& node)
         auto result =
             arithmetic::engine::Evaluate(node.GetExpr(), adapter);
         m_status_ = (result != 0) ? 0 : 1;
+        co_return m_status_;
     }
     catch (const arithmetic::ArithmeticException& ex)
     {
         m_status_ = 1;
         // to do log the error when logger is intergrated
+        co_return m_status_;
     }
 }
 } // namespace exec

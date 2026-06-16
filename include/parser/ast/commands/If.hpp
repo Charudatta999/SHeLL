@@ -33,6 +33,9 @@ public:
     If& operator=(If&&) = delete;
     void Accept(AstVisitor& visitor) override;
 
+    [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
     [[nodiscard]] const std::vector<Branch>& GetBranches() const
     {
         return m_branches_;

@@ -35,6 +35,9 @@ public:
     void Accept(AstVisitor& visitor) override;
 
     [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
+    [[nodiscard]]
     const std::string& GetWord() const
     {
         return m_word_;
