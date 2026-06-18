@@ -2,9 +2,13 @@
 #define EXEC_EXECUTOR_HPP
 
 #include "exec/ExecHelpers.hpp"
-#include "parser/ast/AstVisitor.hpp"
+#include "exec/SuspendedCoro.hpp"
+
+#include "coro/Task.hpp"
+#include "parser/ast/ExecVisitor.hpp"
 #include "shell/expander/Expander.hpp"
 
+#include <coroutine>
 #include <memory>
 #include <string>
 #include <unistd.h>
@@ -29,7 +33,7 @@ namespace exec
 {
 struct PipelineResult;
 
-class Executor : public parser::ast::AstVisitor
+class Executor : public parser::ast::ExecVisitor
 {
 public:
     explicit Executor(
@@ -38,21 +42,22 @@ public:
         const shell::expander::CommandRunner& cmdRunner,
         int outFd = STDOUT_FILENO);
 
-    int Run(const std::unique_ptr<parser::ast::AstNode>& root);
+    int Run(const std::shared_ptr<parser::ast::AstNode>& root);
 
 private:
-    void Visit(parser::ast::SimpleCommand&) override;
-    void Visit(parser::ast::Pipeline&) override;
-    void Visit(parser::ast::List&) override;
-    void Visit(parser::ast::AndOr&) override;
-    void Visit(parser::ast::Subshell&) override;
-    void Visit(parser::ast::Group&) override;
-    void Visit(parser::ast::Function&) override;
-    void Visit(parser::ast::While&) override;
-    void Visit(parser::ast::For&) override;
-    void Visit(parser::ast::If&) override;
-    void Visit(parser::ast::Case&) override;
-    void Visit(parser::ast::ArithmeticCommand&) override;
+    coro::Task Visit(parser::ast::SimpleCommand&) override;
+    coro::Task Visit(parser::ast::Pipeline&) override;
+    coro::Task Visit(parser::ast::List&) override;
+    coro::Task Visit(parser::ast::AndOr&) override;
+    coro::Task Visit(parser::ast::Subshell&) override;
+    coro::Task Visit(parser::ast::Group&) override;
+    coro::Task Visit(parser::ast::Function&) override;
+    coro::Task Visit(parser::ast::While&) override;
+    coro::Task Visit(parser::ast::For&) override;
+    coro::Task Visit(parser::ast::If&) override;
+    coro::Task Visit(parser::ast::Case&) override;
+    coro::Task Visit(parser::ast::ArithmeticCommand&) override;
+
     [[nodiscard]]
     CommandSpec BuildSpec(const std::vector<std::string>& argv,
                           const parser::ast::SimpleCommand&) const;
@@ -60,19 +65,27 @@ private:
     std::vector<std::string>
     ExpandArgv(const std::vector<std::string>& argv);
     void RecordStoppedJob(PipelineResult result,
-                          const std::vector<CommandSpec>&);
+                          const std::string& commandText);
     void Announce(const std::string& line) const;
+
+    int RunToCompletion(const std::unique_ptr<parser::ast::AstNode>& node);
+
+    // Thaw a frozen compound: feed the resumed leaf's real status in, wake
+    // the suspended frame, and drive the rest to completion or the next
+    // freeze. Called (via the captured callable) from fg; the Executor owns
+    // the resume logic, fg only supplies the leaf status.
+    SuspendedCoro::ResumeResult ResumeSuspended(SuspendedCoro& rec,
+                                                int leafStatus);
 
     std::unique_ptr<shell::ShellState>& m_state_;
     std::unique_ptr<builtins ::BuiltinDispatcher>& m_builtins_;
     int m_status_ = 0;
     const shell::expander::CommandRunner& m_cmdRunner_;
     int m_outFd_;
-    // True while traversing a compound (AndOr/List/loop/if/...). A stop
-    // inside a compound can't be suspended as one job (the continuation
-    // lives on the C++ stack), so RecordStoppedJob resumes-to-completion
-    // instead of recording a misleading half-job.
     bool m_inCompound_ = false;
+    std::coroutine_handle<> m_suspendedHandle_;
+    pid_t m_suspendedPgid_;
+    int m_resumedStatus_;
 };
 } // namespace exec
 #endif // EXEC_EXECUTOR_HPP

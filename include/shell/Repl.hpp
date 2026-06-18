@@ -1,6 +1,8 @@
 #ifndef SHELL_REPL_HPP
 #define SHELL_REPL_HPP
 
+#include "exec/Executor.hpp"
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -39,6 +41,7 @@ private:
     std::unique_ptr<ShellState> m_state_;
     std::unique_ptr<builtins::BuiltinDispatcher> m_dispatcher_;
     std::function<std::string(const std::string&)> m_cmdRunner_;
+    std::unique_ptr<exec::Executor> m_executor_;
 };
 
 } // namespace shell

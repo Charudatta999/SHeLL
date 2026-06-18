@@ -44,6 +44,23 @@ Parser::Parser(std::vector<Token> tokens)
 {
 }
 
+// Reconstruct the source text of the tokens in [start, m_pos_) for job
+// display — re-quotes words, maps operators to symbols, single-spaces.
+std::string Parser::SourceTextFrom(std::size_t start) const
+{
+    std::string out;
+    for (std::size_t index = start; index < m_pos_; ++index)
+    {
+        std::string text = tokenText(m_tokens_[index]);
+        if (text.empty()) // newlines / structural
+            continue;
+        if (!out.empty())
+            out += " ";
+        out += text;
+    }
+    return out;
+}
+
 // ─── Token stream helpers
 // ─────────────────────────────────────────────────────
 bool Parser::IsAssignment(const std::string& str) const
@@ -377,7 +394,12 @@ std::unique_ptr<ast::AstNode> Parser::ParseList()
     SkipNewlines();
     while (!AtEnd() && !IsListTerminator(Peek().type))
     {
+        std::size_t srcStart = m_pos_;
         auto node = ParseAndOr();
+        // Stamp the command's source text (tokens consumed by ParseAndOr,
+        // before any &/; separator) for job display.
+        if (node)
+            node->SetSourceText(SourceTextFrom(srcStart));
         bool background = false;
         bool separator = false;
         if (Match(TokenType::Background))
@@ -447,7 +469,7 @@ std::unique_ptr<ast::AstNode> Parser::ExpectList(const char* context)
     return ParseList();
 }
 
-std::unique_ptr<ast::AstNode> Parser::Parse()
+std::shared_ptr<ast::AstNode> Parser::Parse()
 {
     SkipNewlines();
     auto root = ParseList();

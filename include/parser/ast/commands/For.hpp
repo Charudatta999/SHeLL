@@ -14,7 +14,9 @@ class AstVisitor;
 class For final : public AstNode
 {
 public:
-    For(std::string var, std::vector<std::string> words, std::unique_ptr<AstNode> body)
+    For(std::string var,
+        std::vector<std::string> words,
+        std::unique_ptr<AstNode> body)
         : m_var_(std::move(var))
         , m_words_(std::move(words))
         , m_body_(std::move(body))
@@ -28,6 +30,9 @@ public:
     For& operator=(For&&) = delete;
 
     void Accept(AstVisitor& visitor) override;
+
+    [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
 
     [[nodiscard]]
     const std::string& GetVar() const

@@ -56,5 +56,11 @@ CheckOptions:
     value:           'm_'
   - key:             readability-identifier-naming.PrivateMemberSuffix
     value:           '_'
+  - key:             readability-identifier-naming.ClassMemberCase
+    value:           camelBack
+  - key:             readability-identifier-naming.ClassMemberPrefix
+    value:           's_'
+  - key:             readability-identifier-naming.ClassMemberSuffix
+    value:           '_'
   - key:             modernize-use-nodiscard.ReplacementString
     value:           '[[nodiscard]]'

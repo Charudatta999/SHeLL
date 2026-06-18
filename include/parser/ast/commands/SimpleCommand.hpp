@@ -27,6 +27,9 @@ public:
     void Accept(AstVisitor& visitor) override; // match base casing
 
     [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
+    [[nodiscard]]
     const std::vector<std::string>& Argv() const
     {
         return m_argv_;

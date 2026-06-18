@@ -1,4 +1,5 @@
 #include "builtins/BuiltInFunction.hpp"
+#include "exec/SuspendedCoro.hpp"
 #include "exec/WaitStatus.hpp"
 #include "io/FdOps.hpp"
 #include "shell/JobTable.hpp"
@@ -45,6 +46,59 @@ int HandleForegroundOutcome(
     }
     return 1;
 }
+
+// Bring a frozen compound (Ctrl-Z'd && / pipeline / loop) back to the
+// foreground. fg owns only the process/terminal half here; the coroutine
+// half lives behind job.suspended->resume, which the Executor built.
+int ResumeSuspendedJob(
+    shell::JobTable::Job job,
+    const std::unique_ptr<shell::JobTable>& jobs,
+    const std::unique_ptr<builtins::BuiltinContext>& ctx)
+{
+    tcsetpgrp(STDIN_FILENO, job.pid);
+    kill(-job.pid, SIGCONT);
+    // WUNTRACED: the leaf may finish OR be Ctrl-Z'd again — we must tell
+    // those apart, so we cannot use a plain blocking wait.
+    exec::WaitStatus status(job.pid, exec::WaitMode::Foreground);
+    // Take the terminal back before driving the tail; the && tail runs in
+    // the shell's own foreground.
+    tcsetpgrp(STDIN_FILENO, getpgrp());
+
+    if (status.IsStopped())
+    {
+        // The leaf stopped again before finishing — nothing to drive yet;
+        // leave the job exactly as frozen as the user left it.
+        jobs->UpdateJobState(job.id, shell::JobTable::State::Stopped);
+        io::fdops::WriteAll(ctx->outFd,
+                            "[" + std::to_string(job.id) +
+                                "]+ Stopped " + job.command + "\n");
+        return SIGNAL_EXIT_BASE + SIGTSTP;
+    }
+
+    // Leaf finished: hand its real status to the coroutine and let the
+    // rest of the compound run.
+    int leafStatus = status.Exited()
+                         ? status.ExitCode()
+                         : SIGNAL_EXIT_BASE + status.GetSignal();
+    auto outcome = job.suspended->resume(leafStatus);
+    io::fdops::WriteAll(ctx->outFd, job.command + " \n");
+
+    if (outcome.completed)
+    {
+        jobs->RemoveByID(job.id);
+        return outcome.status;
+    }
+
+    // Re-froze deeper in the compound: re-point the job at the new leaf
+    // process group and report it stopped.
+    shell::JobTable::Job& live = jobs->FindById(job.id);
+    live.pid = outcome.newPgid;
+    live.state = shell::JobTable::State::Stopped;
+    io::fdops::WriteAll(ctx->outFd,
+                        "[" + std::to_string(job.id) + "]+ Stopped " +
+                            job.command + "\n");
+    return SIGNAL_EXIT_BASE + SIGTSTP;
+}
 } // namespace
 
 namespace builtins
@@ -63,6 +117,8 @@ int Fg(const std::vector<std::string>& argv,
     if (argv.size() == 1 && argv[0] == "fg")
     {
         auto job = jobs->List().back();
+        if (job.suspended)
+            return ResumeSuspendedJob(job, jobs, ctx);
         tcsetpgrp(STDIN_FILENO, job.pid);
         if (Resume(job))
         {
@@ -100,6 +156,8 @@ int Fg(const std::vector<std::string>& argv,
     try
     {
         auto job = jobs->FindById(value);
+        if (job.suspended)
+            return ResumeSuspendedJob(job, jobs, ctx);
         if (Resume(job))
         {
 

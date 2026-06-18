@@ -111,6 +111,10 @@ struct Token
 // ─── Helper declarations (implemented in Token.cpp) ──────────────────────────
 std::string_view tokenTypeName(TokenType type);
 
+// One token's source form, for reconstructing a command string for
+// display (jobs/fg). Re-wraps quoted words, maps operators to symbols.
+std::string tokenText(const Token& token);
+
 } // namespace parser
 
 #endif // PARSER_TOKEN_HPP

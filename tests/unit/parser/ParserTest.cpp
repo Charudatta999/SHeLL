@@ -22,7 +22,7 @@ using namespace parser::ast;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-static std::unique_ptr<AstNode> parse(const std::string& input)
+static std::shared_ptr<AstNode> parse(const std::string& input)
 {
     Tokenizer tok(input);
     Parser    p(tok.Tokenize());
@@ -30,7 +30,7 @@ static std::unique_ptr<AstNode> parse(const std::string& input)
 }
 
 template <typename T>
-static const T* as(const std::unique_ptr<AstNode>& node)
+static const T* as(const std::shared_ptr<AstNode>& node)
 {
     return dynamic_cast<const T*>(node.get());
 }

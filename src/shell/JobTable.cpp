@@ -5,7 +5,7 @@
 
 namespace shell
 {
-JobTable::JobTable() = default;
+JobTable::JobTable() : m_jobs_({}), m_nextId_(1) {}
 
 JobTable::~JobTable() = default;
 
@@ -17,7 +17,7 @@ std::vector<JobTable::Job> JobTable::Reap()
         exec::WaitStatus waitStatus(itr->pid, exec::WaitMode::Poll);
         if (!waitStatus.IsRunning())
         {
-            if(waitStatus.IsStopped())
+            if (waitStatus.IsStopped())
             {
                 itr->state = State::Stopped;
                 jobEvents.push_back(*itr);
@@ -42,7 +42,8 @@ int JobTable::Add(pid_t pid, const std::string& command, State state)
     m_jobs_.push_back({.id = jobId,
                        .pid = pid,
                        .command = command,
-                       .state = state});
+                       .state = state,
+                       .suspended = nullptr});
     return jobId;
 }
 
@@ -53,9 +54,9 @@ const std::vector<JobTable::Job>& JobTable::List() const
 
 void JobTable::UpdateJobState(int id, State state)
 {
-    for(auto& job : m_jobs_)
+    for (auto& job : m_jobs_)
     {
-        if(job.id == id)
+        if (job.id == id)
         {
             job.state = state;
         }
@@ -64,15 +65,16 @@ void JobTable::UpdateJobState(int id, State state)
 
 JobTable::Job& JobTable::FindById(int id)
 {
-    for(auto& job : m_jobs_)
+    for (auto& job : m_jobs_)
     {
-        if(job.id == id)
+        if (job.id == id)
         {
             return job;
         }
     }
-    throw ShellException("no such job",1);
+    throw ShellException("no such job", 1);
 }
+
 void JobTable::RemoveByID(int id)
 {
     for (auto itr = m_jobs_.begin(); itr != m_jobs_.end(); ++itr)
@@ -83,5 +85,20 @@ void JobTable::RemoveByID(int id)
             break;
         }
     }
+}
+
+int JobTable::AddSuspended(
+    pid_t pid,
+    const std::string& command,
+    std::shared_ptr<exec::SuspendedCoro> suspended,
+    State state)
+{
+    int jobId = m_nextId_++;
+    m_jobs_.push_back({.id = jobId,
+                       .pid = pid,
+                       .command = command,
+                       .state = state,
+                       .suspended = std::move(suspended)});
+    return jobId;
 }
 } // namespace shell

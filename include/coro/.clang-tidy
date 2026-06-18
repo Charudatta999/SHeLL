@@ -1,0 +1,6 @@
+---
+# Coroutine utilities only. The C++ coroutine protocol mandates exact
+# lowercase hook names (get_return_object, initial_suspend, await_ready,
+# ...), so the project's identifier-naming convention can't apply here.
+InheritParentConfig: true
+Checks: '-readability-identifier-naming'

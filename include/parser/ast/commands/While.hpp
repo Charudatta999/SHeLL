@@ -29,6 +29,9 @@ public:
     void Accept(AstVisitor& visitor) override;
 
     [[nodiscard]]
+    coro::Task Accept(ExecVisitor& visitor) override;
+
+    [[nodiscard]]
     const std::unique_ptr<AstNode>& GetCondition() const
     {
         return m_condition_;

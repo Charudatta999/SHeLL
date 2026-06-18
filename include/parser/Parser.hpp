@@ -16,7 +16,7 @@ public:
     explicit Parser(std::vector<Token> tokens);
 
     [[nodiscard]]
-    std::unique_ptr<ast::AstNode> Parse();
+    std::shared_ptr<ast::AstNode> Parse();
 
 private:
     [[nodiscard]]
@@ -56,6 +56,8 @@ private:
     std::unique_ptr<ast::AstNode> ParseFor();
     std::unique_ptr<ast::AstNode> ParseCase();
     std::unique_ptr<ast::AstNode> ParseArithmeticCommand();
+
+    [[nodiscard]] std::string SourceTextFrom(std::size_t start) const;
 
     std::vector<Token> m_tokens_;
     std::size_t m_pos_ = 0;
