@@ -469,7 +469,7 @@ std::unique_ptr<ast::AstNode> Parser::ExpectList(const char* context)
     return ParseList();
 }
 
-std::unique_ptr<ast::AstNode> Parser::Parse()
+std::shared_ptr<ast::AstNode> Parser::Parse()
 {
     SkipNewlines();
     auto root = ParseList();

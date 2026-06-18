@@ -16,7 +16,7 @@ public:
     explicit Parser(std::vector<Token> tokens);
 
     [[nodiscard]]
-    std::unique_ptr<ast::AstNode> Parse();
+    std::shared_ptr<ast::AstNode> Parse();
 
 private:
     [[nodiscard]]

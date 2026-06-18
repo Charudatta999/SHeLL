@@ -1,9 +1,15 @@
 #ifndef SHELL_JOBTABLE_HPP
 #define SHELL_JOBTABLE_HPP
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <sys/types.h>
 #include <vector>
+
+namespace exec
+{
+struct SuspendedCoro;
+}
 
 namespace shell
 {
@@ -24,6 +30,7 @@ public:
         pid_t pid;
         std::string command;
         State state;
+        std::shared_ptr<exec::SuspendedCoro> suspended;
     };
 
     JobTable();
@@ -35,8 +42,12 @@ public:
 
     std::vector<Job> Reap();
 
-    int Add(pid_t pid, const std::string& command, State state= State::Running);
-
+    int Add(pid_t pid,
+            const std::string& command,
+            State state = State::Running);
+    int AddSuspended(pid_t pid,
+                     const std::string& command,
+                     std::shared_ptr<exec::SuspendedCoro> suspended, State state = State::Stopped);
     [[nodiscard]]
     const std::vector<Job>& List() const;
     void UpdateJobState(int id, State state);
@@ -47,7 +58,7 @@ public:
 
 private:
     std::vector<Job> m_jobs_;
-    int m_nextId_ = 1;
+    int m_nextId_;
 };
 
 } // namespace shell

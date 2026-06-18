@@ -59,6 +59,7 @@ Repl::Repl()
                                    m_dispatcher_,
                                    m_cmdRunner_);
     };
+    m_executor_ = std::make_unique<exec::Executor>(m_state_, m_dispatcher_, m_cmdRunner_);
 }
 
 Repl::~Repl() = default;
@@ -195,9 +196,7 @@ int Repl::EvalLine(const std::string& line)
 
         const auto& tokens = tokenizer.Tokenize();
         const auto& parser = parser::Parser(tokens).Parse();
-        auto executor =
-            exec::Executor(m_state_, m_dispatcher_, m_cmdRunner_);
-        auto res = executor.Run(parser);
+        auto res = m_executor_->Run(parser);
         m_state_->SetLastCommandExitCode(res);
         return res;
     }

@@ -18,7 +18,7 @@ namespace
 namespace exec
 {
 std::string CaptureOutput(
-    const std::unique_ptr<parser::ast::AstNode>& root,
+    const std::shared_ptr<parser::ast::AstNode>& root,
     std::unique_ptr<shell::ShellState>& state,
     std::unique_ptr<builtins::BuiltinDispatcher>& dispatcher,
     const shell::expander::CommandRunner& cmdRunner)

@@ -7,6 +7,7 @@
 #include "exec/ExecHelpers.hpp"
 #include "exec/ForkRunner.hpp"
 #include "exec/Pipeline.hpp"
+#include "exec/SuspendedCoro.hpp"
 #include "exec/WaitStatus.hpp"
 #include "io/FdOps.hpp"
 #include "parser/ast/commands/AndOr.hpp"
@@ -34,9 +35,7 @@
 
 namespace
 {
-// Sets a flag true for the duration of a scope, restores on exit.
-// Marks "we are inside a compound command" while a compound node is
-// being traversed (nests correctly).
+
 struct CompoundScope
 {
     bool& flag;
@@ -56,6 +55,25 @@ struct CompoundScope
     CompoundScope& operator=(const CompoundScope&) = delete;
 };
 
+struct SuspendAwaitable
+{
+    std::coroutine_handle<>& slot;
+    int& statusSlot;
+    bool await_ready() noexcept
+    {
+        return false;
+    }
+
+    std::coroutine_handle<>
+    await_suspend(std::coroutine_handle<> self) noexcept
+    {
+        slot = self;
+        return std::noop_coroutine();
+    }
+
+    int await_resume() noexcept {return statusSlot;}
+};
+
 } // namespace
 
 namespace exec
@@ -69,13 +87,43 @@ Executor::Executor(
     , m_builtins_(builtins)
     , m_cmdRunner_(cmdRunner)
     , m_outFd_(outFd)
+    , m_suspendedHandle_({})
+    , m_suspendedPgid_(-1)
+    , m_resumedStatus_(-1)
 {
 }
 
-int Executor::Run(const std::unique_ptr<parser::ast::AstNode>& root)
+int Executor::Run(const std::shared_ptr<parser::ast::AstNode>& root)
 {
+    m_suspendedHandle_ = {};
     coro::Task task = root->Accept(*this);
     task.GetHandle().resume();
+    if (m_suspendedHandle_)
+    {
+        std::shared_ptr<SuspendedCoro> suspended =
+            std::make_shared<SuspendedCoro>(
+                SuspendedCoro{.rootTask = std::move(task),
+                              .leafHandle = m_suspendedHandle_,
+                              .ast = root,
+                              .resume = nullptr});
+
+        // Park the Executor's resume logic on the job so fg can thaw it
+        // without ever holding an Executor handle. rec stays valid after
+        // the move below the job owns the record on the heap.
+        SuspendedCoro* rec = suspended.get();
+        suspended->resume =
+            [this, rec](int leafStatus) -> SuspendedCoro::ResumeResult
+        { return ResumeSuspended(*rec, leafStatus); };
+
+        auto jobId = m_state_->GetJobs()->AddSuspended(
+            m_suspendedPgid_,
+            root->SourceText(),
+            std::move(suspended),
+            shell::JobTable::State::Stopped);
+        std::string out = "[" + std::to_string(jobId) + "]+ Stopped " + root->SourceText() + "\n";
+        Announce(out);
+        return SIGNAL_EXIT_BASE + SIGTSTP;
+    }
     auto& promise = task.GetHandle().promise();
     if (auto excp = promise.Exception())
         std::rethrow_exception(excp);
@@ -93,6 +141,34 @@ int Executor::RunToCompletion(
     return promise.Result();
 }
 
+SuspendedCoro::ResumeResult
+Executor::ResumeSuspended(SuspendedCoro& rec, int leafStatus)
+{
+    // Cleared first so a fresh freeze deeper in the compound is detectable
+    // after the leaf resumes.
+    m_suspendedHandle_ = {};
+    // Drop the just-finished leaf's real status in the mailbox; the thawed
+    // SuspendAwaitable::await_resume reads it as the value of co_await.
+    m_resumedStatus_ = leafStatus;
+    rec.leafHandle.resume();
+
+    if (m_suspendedHandle_)
+    {
+        // Ctrl-Z again: the compound re-froze on a new leaf. Re-point the
+        // record at it and report the new process group up to fg.
+        rec.leafHandle = m_suspendedHandle_;
+        return {.completed = false,
+                .status = SIGNAL_EXIT_BASE + SIGTSTP,
+                .newPgid = m_suspendedPgid_};
+    }
+
+    // The whole compound ran out; surface its final status (and any throw).
+    auto& promise = rec.rootTask.GetHandle().promise();
+    if (auto excp = promise.Exception())
+        std::rethrow_exception(excp);
+    return {.completed = true, .status = promise.Result(), .newPgid = -1};
+}
+
 CommandSpec
 Executor::BuildSpec(const std::vector<std::string>& argv,
                     const parser::ast::SimpleCommand& command) const
@@ -107,24 +183,6 @@ void Executor::RecordStoppedJob(PipelineResult result,
 {
     if (result.state != exec::State::Stopped)
         return;
-
-    // A stop inside a compound (&&, list, loop, if) can't be
-    // suspended as one job — the continuation lives on the shell's
-    // call stack, not in any process. Rather than record a half-job
-    // and silently drop the rest, resume the process and run it to
-    // completion.
-    if (m_inCompound_)
-    {
-        kill(-result.pgid, SIGCONT);
-        exec::WaitStatus done(result.pgid, exec::WaitMode::UntilExit);
-        m_status_ = done.Exited() ? done.ExitCode()
-                    : done.Signaled()
-                        ? SIGNAL_EXIT_BASE + done.GetSignal()
-                        : INVALID_STATUS;
-        Announce(
-            "shell: cannot suspend a compound command; resumed\n");
-        return;
-    }
 
     auto jobID =
         m_state_->GetJobs()->Add(result.pgid,
@@ -191,7 +249,15 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
             m_state_->IsJobControlEnabled() ? WaitMode::Foreground
                                             : WaitMode::UntilExit);
         m_status_ = result.status;
-        RecordStoppedJob(result, command.SourceText());
+        if (result.state == exec::State::Stopped && m_inCompound_)
+        {
+            m_suspendedPgid_ = result.pgid;
+            m_status_ = co_await SuspendAwaitable{.slot = m_suspendedHandle_, .statusSlot = m_resumedStatus_};
+        }
+        else
+        {
+            RecordStoppedJob(result, command.SourceText());
+        }
     }
     co_return m_status_;
 }
@@ -215,7 +281,15 @@ coro::Task Executor::Visit(parser::ast::Pipeline& pipeline)
         m_state_->IsJobControlEnabled() ? WaitMode::Foreground
                                         : WaitMode::UntilExit);
     m_status_ = result.status;
-    RecordStoppedJob(result, pipeline.SourceText());
+    if (result.state == exec::State::Stopped && m_inCompound_)
+    {
+        m_suspendedPgid_ = result.pgid;
+        m_status_ = co_await SuspendAwaitable{.slot = m_suspendedHandle_,.statusSlot = m_resumedStatus_};
+    }
+    else
+    {
+        RecordStoppedJob(result, pipeline.SourceText());
+    }
     if (pipeline.Bang())
     {
         m_status_ = (m_status_ == 0) ? 1 : 0;
@@ -285,16 +359,16 @@ coro::Task Executor::Visit(parser::ast::List& list)
 coro::Task Executor::Visit(parser::ast::AndOr& command)
 {
     CompoundScope scope(m_inCompound_);
-    co_await  command.Lhs()->Accept(*this);
+    co_await command.Lhs()->Accept(*this);
     if ((m_status_ == 0 &&
          (command.Operator() == parser::ast::AndOr::Op::And)))
     {
-        co_await  command.Rhs()->Accept(*this);
+        co_await command.Rhs()->Accept(*this);
     }
     else if (m_status_ != 0 &&
              (command.Operator() == parser::ast::AndOr::Op::Or))
     {
-        co_await  command.Rhs()->Accept(*this);
+        co_await command.Rhs()->Accept(*this);
     }
     co_return m_status_;
 }
@@ -311,7 +385,7 @@ coro::Task Executor::Visit(parser::ast::While& condi)
     CompoundScope scope(m_inCompound_);
     while (true)
     {
-        co_await  condi.GetCondition()->Accept(*this);
+        co_await condi.GetCondition()->Accept(*this);
         bool keepGoing = (m_status_ == 0);
         if (condi.IsUntil())
         {
@@ -333,7 +407,7 @@ coro::Task Executor::Visit(parser::ast::For& loop)
     for (const auto& word : words)
     {
         m_state_->SetVar(loop.GetVar(), word);
-        co_await  loop.GetBody()->Accept(*this);
+        co_await loop.GetBody()->Accept(*this);
     }
     co_return m_status_;
 }
@@ -344,10 +418,10 @@ coro::Task Executor::Visit(parser::ast::If& condi)
     const auto& branches = condi.GetBranches();
     for (const auto& branch : branches)
     {
-        co_await  branch.condition->Accept(*this);
+        co_await branch.condition->Accept(*this);
         if (m_status_ == 0)
         {
-            co_await  branch.body->Accept(*this);
+            co_await branch.body->Accept(*this);
             co_return m_status_;
         }
     }
