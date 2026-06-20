@@ -5,7 +5,7 @@
 #include "parser/ast/AstNode.hpp"
 #include "shell/ShellState.hpp"
 #include "io/Pipe.hpp"
-#include "exec/ForkRunner.hpp"
+#include "exec/ProcessExecutor.hpp"
 #include "exec/WaitStatus.hpp"
 #include "io/FdOps.hpp"
 
@@ -24,7 +24,7 @@ std::string CaptureOutput(
     const shell::expander::CommandRunner& cmdRunner)
 {
     auto pipe = io::Pipe();
-    auto runner = ForkRunner();
+    auto runner = ProcessExecutor();
     auto childFn = [&]() -> int
     {
         if(!io::fdops::Dup2(*pipe.GetWritePipeFD(), STDOUT_FILENO))
@@ -37,7 +37,7 @@ std::string CaptureOutput(
         exec::Executor executor(state, dispatcher, cmdRunner,STDERR_FILENO );
         return executor.Run(root);
     };
-    runner.Start(childFn);
+    runner.Fork(childFn, 0);
     pipe.CloseWriteFD();
 
     std::string output;

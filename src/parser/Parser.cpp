@@ -254,6 +254,17 @@ std::unique_ptr<ast::AstNode> Parser::ParseSimpleCommand()
                                    optr.fd,
                                    Advance().value);
         }
+        else if (Check(TokenType::HereString))
+        {
+            const auto& optr = Advance();
+            if (!Check(TokenType::Word))
+                throw ParserException("expected word after <<<",
+                                      Peek().line,
+                                      Peek().col);
+            redirects.emplace_back(ast::Redirect::Kind::HereString,
+                                   optr.fd,
+                                   Advance().value);
+        }
         else if (Check(TokenType::Word) ||
                  Check(TokenType::SingleQuoted) ||
                  Check(TokenType::DoubleQuoted) ||

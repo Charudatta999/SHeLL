@@ -4,12 +4,16 @@
 #include "arithmetic/ArithmeticException.hpp"
 #include "builtins/BuiltInFunction.hpp"
 #include "builtins/BuiltinDispatcher.hpp"
+#include "exec/ExecException.hpp"
 #include "exec/ExecHelpers.hpp"
-#include "exec/ForkRunner.hpp"
-#include "exec/Pipeline.hpp"
+#include "exec/ProcessExecutor.hpp"
+#include "exec/Redirection.hpp"
 #include "exec/SuspendedCoro.hpp"
 #include "exec/WaitStatus.hpp"
 #include "io/FdOps.hpp"
+#include "io/IOException.hpp"
+#include "io/Pipe.hpp"
+#include "parser/ast/Redirect.hpp"
 #include "parser/ast/commands/AndOr.hpp"
 #include "parser/ast/commands/ArithmeticCommand.hpp"
 #include "parser/ast/commands/Case.hpp"
@@ -26,11 +30,13 @@
 #include "shell/ShellArithmeticVars.hpp"
 #include "shell/ShellState.hpp"
 #include "shell/expander/Expander.hpp"
+#include "signals/SignalManager.hpp"
 #include "utils/ErrorCodes.hpp"
 
 #include <csignal>
 #include <fnmatch.h>
 #include <memory>
+#include <syslog.h>
 #include <unistd.h>
 
 namespace
@@ -59,6 +65,7 @@ struct SuspendAwaitable
 {
     std::coroutine_handle<>& slot;
     int& statusSlot;
+
     bool await_ready() noexcept
     {
         return false;
@@ -71,9 +78,46 @@ struct SuspendAwaitable
         return std::noop_coroutine();
     }
 
-    int await_resume() noexcept {return statusSlot;}
+    int await_resume() noexcept
+    {
+        return statusSlot;
+    }
 };
 
+void SetupChildFds(
+    const std::vector<std::unique_ptr<io::Pipe>>& pipes,
+    size_t idx,
+    size_t nStages,
+    const std::vector<parser::ast::Redirect>& redirects)
+{
+    if (idx > 0)
+        io::fdops::Dup2(*pipes[idx - 1]->GetReadPipeFD(),
+                        STDIN_FILENO);
+    if (idx < nStages - 1)
+        io::fdops::Dup2(*pipes[idx]->GetWritePipeFD(), STDOUT_FILENO);
+    for (const auto& redir : redirects)
+    {
+        exec::ApplyRedirect(redir);
+    }
+}
+
+std::unique_ptr<io::Pipe> CreatePipe()
+{
+    try
+    {
+        return std::make_unique<io::Pipe>();
+    }
+    catch (const io::IOException& ex)
+    {
+        syslog(LOG_ERR,
+               "SHELL [exec] [Pipeline]: Failed to create pipe: %s "
+               "(errno=%d)",
+               ex.what(),
+               ex.GetErrorCode());
+        throw exec::ExecException("failed To create pipe",
+                                  FAILED_TO_CREATE);
+    }
+}
 } // namespace
 
 namespace exec
@@ -107,9 +151,9 @@ int Executor::Run(const std::shared_ptr<parser::ast::AstNode>& root)
                               .ast = root,
                               .resume = nullptr});
 
-        // Park the Executor's resume logic on the job so fg can thaw it
-        // without ever holding an Executor handle. rec stays valid after
-        // the move below the job owns the record on the heap.
+        // Park the Executor's resume logic on the job so fg can thaw
+        // it without ever holding an Executor handle. rec stays valid
+        // after the move below the job owns the record on the heap.
         SuspendedCoro* rec = suspended.get();
         suspended->resume =
             [this, rec](int leafStatus) -> SuspendedCoro::ResumeResult
@@ -120,7 +164,8 @@ int Executor::Run(const std::shared_ptr<parser::ast::AstNode>& root)
             root->SourceText(),
             std::move(suspended),
             shell::JobTable::State::Stopped);
-        std::string out = "[" + std::to_string(jobId) + "]+ Stopped " + root->SourceText() + "\n";
+        std::string out = "[" + std::to_string(jobId) +
+                          "]+ Stopped " + root->SourceText() + "\n";
         Announce(out);
         return SIGNAL_EXIT_BASE + SIGTSTP;
     }
@@ -144,29 +189,33 @@ int Executor::RunToCompletion(
 SuspendedCoro::ResumeResult
 Executor::ResumeSuspended(SuspendedCoro& rec, int leafStatus)
 {
-    // Cleared first so a fresh freeze deeper in the compound is detectable
-    // after the leaf resumes.
+    // Cleared first so a fresh freeze deeper in the compound is
+    // detectable after the leaf resumes.
     m_suspendedHandle_ = {};
-    // Drop the just-finished leaf's real status in the mailbox; the thawed
-    // SuspendAwaitable::await_resume reads it as the value of co_await.
+    // Drop the just-finished leaf's real status in the mailbox; the
+    // thawed SuspendAwaitable::await_resume reads it as the value of
+    // co_await.
     m_resumedStatus_ = leafStatus;
     rec.leafHandle.resume();
 
     if (m_suspendedHandle_)
     {
-        // Ctrl-Z again: the compound re-froze on a new leaf. Re-point the
-        // record at it and report the new process group up to fg.
+        // Ctrl-Z again: the compound re-froze on a new leaf. Re-point
+        // the record at it and report the new process group up to fg.
         rec.leafHandle = m_suspendedHandle_;
         return {.completed = false,
                 .status = SIGNAL_EXIT_BASE + SIGTSTP,
                 .newPgid = m_suspendedPgid_};
     }
 
-    // The whole compound ran out; surface its final status (and any throw).
+    // The whole compound ran out; surface its final status (and any
+    // throw).
     auto& promise = rec.rootTask.GetHandle().promise();
     if (auto excp = promise.Exception())
         std::rethrow_exception(excp);
-    return {.completed = true, .status = promise.Result(), .newPgid = -1};
+    return {.completed = true,
+            .status = promise.Result(),
+            .newPgid = -1};
 }
 
 CommandSpec
@@ -178,14 +227,15 @@ Executor::BuildSpec(const std::vector<std::string>& argv,
                        command.Assignments());
 }
 
-void Executor::RecordStoppedJob(PipelineResult result,
+void Executor::RecordStoppedJob(exec::State state,
+                                pid_t pid,
                                 const std::string& commandText)
 {
-    if (result.state != exec::State::Stopped)
+    if (state != exec::State::Stopped)
         return;
 
     auto jobID =
-        m_state_->GetJobs()->Add(result.pgid,
+        m_state_->GetJobs()->Add(pid,
                                  commandText,
                                  shell::JobTable::State::Stopped);
     std::string out = "[" + std::to_string(jobID) + "]+ Stopped " +
@@ -242,70 +292,201 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
     else
     {
         auto spec = BuildSpec(argv, command);
-        auto pipeline = exec::Pipeline();
-        auto result = pipeline.Run(
-            {spec},
-            m_state_->IsOptionEnabled("pipefail"),
-            m_state_->IsJobControlEnabled() ? WaitMode::Foreground
-                                            : WaitMode::UntilExit);
-        m_status_ = result.status;
-        if (result.state == exec::State::Stopped && m_inCompound_)
+        if (m_inForkedChild_)
         {
-            m_suspendedPgid_ = result.pgid;
-            m_status_ = co_await SuspendAwaitable{.slot = m_suspendedHandle_, .statusSlot = m_resumedStatus_};
+            ProcessExecutor proc;
+            proc.Exec(spec);
+        }
+
+        ProcessExecutor runner;
+        auto& sigMgr = m_state_->GetSignalMgr();
+        runner.Fork(
+            [&]() -> int
+            {
+                sigMgr->ResetForChild();
+                ProcessExecutor proc;
+                proc.Exec(spec);
+                return EXIT_FAILURE;
+            },
+            0);
+
+        auto waitMode = m_state_->IsJobControlEnabled()
+                            ? WaitMode::Foreground
+                            : WaitMode::UntilExit;
+        if (waitMode == WaitMode::Foreground)
+            tcsetpgrp(STDIN_FILENO, runner.Pid());
+
+        WaitStatus status(runner.Pid(), waitMode);
+
+        if (waitMode == WaitMode::Foreground)
+            tcsetpgrp(STDIN_FILENO, getpgrp());
+
+        auto state = status.IsStopped() ? State::Stopped
+                                        : State::Done;
+        if (state == State::Stopped && m_inCompound_)
+        {
+            m_suspendedPgid_ = runner.Pid();
+            m_status_ = co_await SuspendAwaitable{
+                .slot = m_suspendedHandle_,
+                .statusSlot = m_resumedStatus_};
         }
         else
         {
-            RecordStoppedJob(result, command.SourceText());
+            RecordStoppedJob(state, runner.Pid(),
+                             command.SourceText());
+        }
+        if (state == State::Done)
+        {
+            if (status.Signaled())
+                m_status_ = SIGNAL_EXIT_BASE + status.GetSignal();
+            else if (status.Exited())
+                m_status_ = status.ExitCode();
+            else
+                m_status_ = 0;
         }
     }
     co_return m_status_;
+}
+
+std::vector<ProcessExecutor> Executor::LaunchStages(
+    const std::vector<std::unique_ptr<parser::ast::AstNode>>& stages,
+    const std::vector<std::unique_ptr<io::Pipe>>& pipes)
+{
+    std::vector<ProcessExecutor> runners(stages.size());
+    auto& sigMgr = m_state_->GetSignalMgr();
+    pid_t pgid = 0;
+    for (size_t idx = 0; idx < stages.size(); idx++)
+    {
+        runners[idx].Fork(
+            [&, idx]()
+            {
+                sigMgr->ResetForChild();
+                SetupChildFds(pipes, idx, stages.size(),
+                              stages[idx]->Redirects());
+                m_inForkedChild_ = true;
+                RunToCompletion(stages[idx]);
+                return m_status_;
+            },
+            pgid);
+        pgid = runners[0].Pid();
+    }
+    return runners;
+}
+
+std::vector<std::unique_ptr<WaitStatus>> Executor::WaitStages(
+    const std::vector<ProcessExecutor>& runners,
+    WaitMode mode)
+{
+    if (mode == WaitMode::Foreground)
+        tcsetpgrp(STDIN_FILENO, runners[0].Pid());
+
+    std::vector<std::unique_ptr<WaitStatus>> statuses(runners.size());
+    for (size_t i = 0; i < runners.size(); i++)
+        statuses[i] =
+            std::make_unique<WaitStatus>(runners[i].Pid(), mode);
+
+    if (mode == WaitMode::Foreground)
+        tcsetpgrp(STDIN_FILENO, getpgrp());
+
+    return statuses;
+}
+
+int Executor::CollectStatus(
+    const std::vector<std::unique_ptr<WaitStatus>>& statuses,
+    bool pipefail)
+{
+    if (!pipefail)
+    {
+        const auto& status = statuses.back();
+        if (status->IsValid())
+        {
+            if (status->Signaled())
+                return SIGNAL_EXIT_BASE + status->GetSignal();
+            else if (status->Exited())
+                return status->ExitCode();
+        }
+        return 0;
+    }
+    for (const auto& status : statuses)
+    {
+        if (status->IsValid())
+        {
+            if (status->Signaled())
+                return SIGNAL_EXIT_BASE + status->GetSignal();
+            else if (status->Exited() && status->ExitCode() != 0)
+                return status->ExitCode();
+        }
+    }
+    return 0;
 }
 
 coro::Task Executor::Visit(parser::ast::Pipeline& pipeline)
 {
     const auto& stages = pipeline.Stages();
-    std::vector<CommandSpec> specs;
-    for (const auto& stage : stages)
+    std::vector<std::unique_ptr<io::Pipe>> pipes;
+    try
     {
-        const auto& simpleCommand =
-            dynamic_cast<parser::ast::SimpleCommand*>(stage.get());
-        if (!simpleCommand)
-            continue;
-        auto argv = ExpandArgv(simpleCommand->Argv());
-        specs.emplace_back(BuildSpec(argv, *simpleCommand));
+        for (size_t i = 0; i < stages.size() - 1; i++)
+            pipes.push_back(CreatePipe());
     }
-    auto result = exec::Pipeline().Run(
-        specs,
-        m_state_->IsOptionEnabled("pipefail"),
-        m_state_->IsJobControlEnabled() ? WaitMode::Foreground
-                                        : WaitMode::UntilExit);
-    m_status_ = result.status;
-    if (result.state == exec::State::Stopped && m_inCompound_)
+    catch (const ExecException& ex)
     {
-        m_suspendedPgid_ = result.pgid;
-        m_status_ = co_await SuspendAwaitable{.slot = m_suspendedHandle_,.statusSlot = m_resumedStatus_};
+        throw ExecException(
+            std::string("SHELL [exec] [Pipeline] : Failed to run "
+                        "command: ") +
+                ex.what() +
+                " with errno: " + std::to_string(errno),
+            ex.GetErrorCode());
+    }
+
+    auto runners = LaunchStages(stages, pipes);
+
+    for (auto& pipe : pipes)
+    {
+        pipe->GetReadPipeFD()->Close();
+        pipe->GetWritePipeFD()->Close();
+    }
+
+    auto waitMode = m_state_->IsJobControlEnabled()
+                        ? WaitMode::Foreground
+                        : WaitMode::UntilExit;
+    auto statuses = WaitStages(runners, waitMode);
+
+    auto state = statuses.back()->IsStopped() ? State::Stopped
+                                              : State::Done;
+    if (state == State::Stopped && m_inCompound_)
+    {
+        m_suspendedPgid_ = runners[0].Pid();
+        m_status_ =
+            co_await SuspendAwaitable{.slot = m_suspendedHandle_,
+                                      .statusSlot = m_resumedStatus_};
     }
     else
     {
-        RecordStoppedJob(result, pipeline.SourceText());
+        RecordStoppedJob(state, runners[0].Pid(),
+                         pipeline.SourceText());
     }
+
+    if (state == State::Done)
+        m_status_ = CollectStatus(
+            statuses, m_state_->IsOptionEnabled("pipefail"));
+
     if (pipeline.Bang())
-    {
         m_status_ = (m_status_ == 0) ? 1 : 0;
-    }
+
     co_return m_status_;
 }
 
 coro::Task Executor::Visit(parser::ast::Subshell& node)
 {
-    ForkRunner runner;
+    ProcessExecutor runner;
     m_status_ = runner.Run(
         [&]
         {
             RunToCompletion(node.GetBody());
             return m_status_;
         },
+        0,
         m_state_->IsJobControlEnabled() ? WaitMode::Foreground
                                         : WaitMode::Poll);
     co_return m_status_;
@@ -319,7 +500,7 @@ coro::Task Executor::Visit(parser::ast::List& list)
     {
         if (item.background)
         {
-            auto runner = ForkRunner();
+            auto runner = ProcessExecutor();
             int errCode = runner.Run(
                 [&]
                 {
@@ -329,6 +510,7 @@ coro::Task Executor::Visit(parser::ast::List& list)
                     RunToCompletion(item.node);
                     return m_status_;
                 },
+                0,
                 WaitMode::Poll);
             if (errCode == PROCESS_RUNNING)
             {
