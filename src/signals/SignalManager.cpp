@@ -41,4 +41,13 @@ void SignalManager::Apply(int signo,
     action.sa_flags = 0;
     sigaction(signo, &action, nullptr);
 }
+
+void SignalManager::ResetForChild()
+{
+    Default(SIGTSTP);
+    Default(SIGTTIN);
+    Default(SIGTTOU);
+    Default(SIGINT);
+    Default(SIGQUIT);
+}
 } // namespace signals

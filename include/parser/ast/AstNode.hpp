@@ -1,9 +1,11 @@
 #ifndef PARSER_AST_NODE_HPP
 #define PARSER_AST_NODE_HPP
 
+#include "parser/ast/Redirect.hpp"
 #include "coro/Task.hpp"
-#include <string>
 
+#include <string>
+#include <vector>
 namespace parser::ast
 {
 
@@ -15,6 +17,8 @@ class AstNode
 {
 public:
     AstNode() = default;
+    explicit AstNode(std::vector<Redirect> redirects)
+    : m_redirects_(std::move(redirects)) {}
     virtual ~AstNode() = default;
     AstNode(const AstNode& astNode) = delete;
     AstNode& operator=(const AstNode& astNode) = delete;
@@ -36,7 +40,12 @@ public:
     {
         return m_sourceText_;
     }
-
+    const std::vector<Redirect>& Redirects() const
+    {
+        return m_redirects_;
+    }
+protected:
+    std::vector<Redirect> m_redirects_;
 private:
     std::string m_sourceText_;
 };

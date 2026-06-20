@@ -18,8 +18,8 @@ public:
         const std::vector<Redirect>& redirects,
         const std::vector<std::pair<std::string, std::string>>&
             assignments)
-        : m_argv_(argv)
-        , m_redirects_(redirects)
+        : AstNode(redirects)
+        , m_argv_(argv)
         , m_assignments_(assignments)
     {
     }
@@ -50,7 +50,6 @@ public:
 
 private:
     std::vector<std::string> m_argv_;
-    std::vector<Redirect> m_redirects_;
     std::vector<std::pair<std::string, std::string>> m_assignments_;
 };
 } // namespace parser::ast

@@ -1,14 +1,16 @@
 #ifndef EXEC_EXECUTOR_HPP
 #define EXEC_EXECUTOR_HPP
 
-#include "exec/ExecHelpers.hpp"
-#include "exec/SuspendedCoro.hpp"
-
 #include "coro/Task.hpp"
+#include "exec/ExecHelpers.hpp"
+#include "exec/ProcessExecutor.hpp"
+#include "exec/SuspendedCoro.hpp"
+#include "exec/WaitStatus.hpp"
 #include "parser/ast/ExecVisitor.hpp"
 #include "shell/expander/Expander.hpp"
 
 #include <coroutine>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unistd.h>
@@ -24,6 +26,11 @@ namespace shell
 class ShellState;
 }
 
+namespace io
+{
+class Pipe;
+}
+
 namespace parser::ast
 {
 class AstNode;
@@ -31,7 +38,12 @@ class AstNode;
 
 namespace exec
 {
-struct PipelineResult;
+
+enum class State : std::uint8_t
+{
+    Stopped,
+    Done,
+};
 
 class Executor : public parser::ast::ExecVisitor
 {
@@ -64,18 +76,33 @@ private:
     [[nodiscard]]
     std::vector<std::string>
     ExpandArgv(const std::vector<std::string>& argv);
-    void RecordStoppedJob(PipelineResult result,
+    void RecordStoppedJob(exec::State state,
+                          pid_t pid,
                           const std::string& commandText);
     void Announce(const std::string& line) const;
 
-    int RunToCompletion(const std::unique_ptr<parser::ast::AstNode>& node);
+    int RunToCompletion(
+        const std::unique_ptr<parser::ast::AstNode>& node);
 
-    // Thaw a frozen compound: feed the resumed leaf's real status in, wake
-    // the suspended frame, and drive the rest to completion or the next
-    // freeze. Called (via the captured callable) from fg; the Executor owns
-    // the resume logic, fg only supplies the leaf status.
+    // Thaw a frozen compound: feed the resumed leaf's real status in,
+    // wake the suspended frame, and drive the rest to completion or
+    // the next freeze. Called (via the captured callable) from fg;
+    // the Executor owns the resume logic, fg only supplies the leaf
+    // status.
     SuspendedCoro::ResumeResult ResumeSuspended(SuspendedCoro& rec,
                                                 int leafStatus);
+
+    std::vector<ProcessExecutor> LaunchStages(
+        const std::vector<std::unique_ptr<parser::ast::AstNode>>& stages,
+        const std::vector<std::unique_ptr<io::Pipe>>& pipes);
+
+    std::vector<std::unique_ptr<WaitStatus>> WaitStages(
+        const std::vector<ProcessExecutor>& runners,
+        WaitMode mode);
+
+    int CollectStatus(
+        const std::vector<std::unique_ptr<WaitStatus>>& statuses,
+        bool pipefail);
 
     std::unique_ptr<shell::ShellState>& m_state_;
     std::unique_ptr<builtins ::BuiltinDispatcher>& m_builtins_;
@@ -83,6 +110,7 @@ private:
     const shell::expander::CommandRunner& m_cmdRunner_;
     int m_outFd_;
     bool m_inCompound_ = false;
+    bool m_inForkedChild_ = false;
     std::coroutine_handle<> m_suspendedHandle_;
     pid_t m_suspendedPgid_;
     int m_resumedStatus_;

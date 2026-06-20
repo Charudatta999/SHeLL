@@ -17,11 +17,10 @@ add_executable(shell_tests
     unit/shell/ExpanderTest.cpp
     unit/shell/JobTableTest.cpp
     unit/exec/CommandSpecTest.cpp
-    unit/exec/ForkRunnerTest.cpp
+    unit/exec/ProcessExecutorTest.cpp
     unit/exec/WaitStatusTest.cpp
     unit/exec/TaskTest.cpp
     unit/exec/RedirectionTest.cpp
-    unit/exec/PipelineTest.cpp
     unit/exec/CaptureOutputTest.cpp
     unit/exec/ExecutorTest.cpp
     unit/exec/ArithmeticCommandTest.cpp

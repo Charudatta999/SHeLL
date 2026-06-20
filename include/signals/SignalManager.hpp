@@ -26,6 +26,8 @@ public:
     void SetHandler(int signo, void (*handler)(int));
     void Ignore(int signo);
     void Default(int signo);
+    /// @brief Defaults the signals for child
+    void ResetForChild();
 
 private:
     void Apply(int signo, std::optional<void (*)(int)>handler);

@@ -122,11 +122,9 @@ add_library(shell_core STATIC
     # --- Executor ---
     src/exec/ExecException.cpp
     src/exec/Executor.cpp
-    src/exec/Process.cpp
-    src/exec/Pipeline.cpp
     src/exec/Redirection.cpp
     src/exec/WaitStatus.cpp
-    src/exec/ForkRunner.cpp
+    src/exec/ProcessExecutor.cpp
     src/exec/CaptureOutput.cpp
 
     # --- Arithmetic ---
