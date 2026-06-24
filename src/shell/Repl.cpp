@@ -48,6 +48,7 @@ namespace shell
 Repl::Repl()
     : m_state_(std::make_unique<ShellState>(LoadEnvironMap()))
     , m_dispatcher_(std::make_unique<builtins::BuiltinDispatcher>())
+    , m_history_(m_state_->GetVar("HOME").value_or("") + "/.shell_history")
 {
     m_cmdRunner_ = [this](const std::string& text) -> std::string
     {
@@ -60,26 +61,26 @@ Repl::Repl()
                                    m_cmdRunner_);
     };
     m_executor_ = std::make_unique<exec::Executor>(m_state_, m_dispatcher_, m_cmdRunner_);
+    m_editor_ = std::make_unique<line::LineEditor>(m_terminal_, m_history_);
+    m_history_.Load();
 }
 
 Repl::~Repl() = default;
 
 int Repl::Run()
 {
-    // Job control only when we're an interactive shell on a real
-    // terminal. A piped/redirected stdin (scripts, tests) must not
-    // ignore stop signals or grab terminal control — doing so would
-    // SIGTTOU-stop the process the moment it writes output.
-    if (isatty(STDIN_FILENO))
+    m_interactive_ = isatty(STDIN_FILENO);
+
+    if (m_interactive_)
     {
         setpgid(0, 0);
         tcsetpgrp(STDIN_FILENO, getpgrp());
         m_state_->GetSignalMgr()->SetupInteractiveSignals();
         m_state_->EnableJobControl(true);
+        m_terminal_.EnableRawMode();
     }
 
-    std::string line;
-    std::string buffer; // accumulates lines of one incomplete command
+    std::string buffer;
     while (m_state_->IsRunning())
     {
         if (buffer.empty())
@@ -93,56 +94,79 @@ int Repl::Run()
                         : "Done";
                 std::string out = "[" + std::to_string(event.id) +
                                   "]+ " + word + " " + event.command +
-                                  "\n";
+                                  "\r\n";
                 io::fdops::WriteAll(STDOUT_FILENO, out);
             }
-            PrintPrompt();
+        }
+
+        std::string line;
+        if (m_interactive_)
+        {
+            auto prompt = buffer.empty() ? BuildPrompt() : std::string("> ");
+            auto result = m_editor_->ReadLine(prompt);
+            if (!result.has_value())
+            {
+                if (!buffer.empty())
+                {
+                    io::fdops::WriteAll(STDOUT_FILENO,
+                                        "unexpected end of input\r\n");
+                    buffer.clear();
+                    continue;
+                }
+                break;
+            }
+            line = result.value();
         }
         else
         {
-            std::string out = "> "; // continuation
-            io::fdops::WriteAll(STDOUT_FILENO, out);
-        }
-        if (!ReadLine(line))
-        {
-            if (!buffer.empty())
+            if (buffer.empty())
+                io::fdops::WriteAll(STDOUT_FILENO, BuildPrompt());
+            else
+                io::fdops::WriteAll(STDOUT_FILENO, "> ");
+
+            if (!ReadLine(line))
             {
-                // Ctrl-D mid-continuation: drop the partial command,
-                // report, and keep the shell alive.
-                std::string out = "unexpected end of input \n";
-                io::fdops::WriteAll(STDOUT_FILENO, out);
-                buffer.clear();
-                std::cin.clear();
-                continue;
+                if (!buffer.empty())
+                {
+                    io::fdops::WriteAll(STDOUT_FILENO,
+                                        "unexpected end of input\n");
+                    buffer.clear();
+                    continue;
+                }
+                break;
             }
-            break;
         }
+
         if (!buffer.empty())
-            buffer += '\n'; // newline is a command separator
+            buffer += '\n';
         buffer += line;
 
         try
         {
+            m_terminal_.DisableRawMode();
             EvalLine(buffer);
+            if (m_interactive_ && !buffer.empty())
+                m_history_.Add(buffer);
             buffer.clear();
+            if (m_interactive_)
+                m_terminal_.EnableRawMode();
         }
         catch (const parser::IncompleteInputException&)
         {
-            // valid so far, just ends too early -> keep reading
+            if (m_interactive_)
+                m_terminal_.EnableRawMode();
         }
     }
+
+    m_terminal_.DisableRawMode();
     return m_state_->GetShellExitCode();
 }
 
-void Repl::PrintPrompt()
+std::string Repl::BuildPrompt()
 {
-    std::string out;
-
     std::string sigil = getuid() ? "$" : "#";
-    out = "[" + m_state_->GetVar("USER").value_or("") + "@" +
-          m_state_->GetCWD() + "]" + sigil;
-
-    io::fdops::WriteAll(STDOUT_FILENO, out);
+    return "[" + m_state_->GetVar("USER").value_or("") + "@" +
+           m_state_->GetCWD() + "]" + sigil;
 }
 
 bool Repl::ReadLine(std::string& line)
@@ -169,7 +193,7 @@ bool Repl::ReadLine(std::string& line)
                                       event.command + "\n";
                     io::fdops::WriteAll(STDOUT_FILENO, out);
                 }
-                PrintPrompt();
+                io::fdops::WriteAll(STDOUT_FILENO, BuildPrompt());
                 continue;
             }
         }
