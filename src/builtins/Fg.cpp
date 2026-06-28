@@ -10,6 +10,7 @@
 #include <charconv>
 #include <csignal>
 #include <string>
+#include <unistd.h>
 
 namespace
 {

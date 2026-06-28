@@ -171,8 +171,10 @@ add_library(shell_core STATIC
 
 target_include_directories(shell_core
     PUBLIC ${SHELL_INCLUDE_DIR}
-    PRIVATE ${RAPIDJSON_INCLUDE_DIRS}
 )
+if(RAPIDJSON_INCLUDE_DIRS)
+    target_include_directories(shell_core PRIVATE ${RAPIDJSON_INCLUDE_DIRS})
+endif()
 target_set_warnings(shell_core)
 target_enable_sanitizers(shell_core)
 

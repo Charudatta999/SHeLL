@@ -27,8 +27,21 @@ namespace io
 Pipe::Pipe()
 {
     std::array<int, 2> fds{-1, -1};
+#if defined(__linux__)
     if (pipe2(fds.data(), O_CLOEXEC) != 0)
         throw IOException("Pipe creation failed", errno);
+#else
+    if (::pipe(fds.data()) != 0)
+        throw IOException("Pipe creation failed", errno);
+    // Set O_CLOEXEC on both ends atomically is not possible without pipe2,
+    // so set it with fcntl after creation.
+    for (int fd : fds)
+    {
+        int flags = fcntl(fd, F_GETFD);
+        if (flags == -1 || fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1)
+            throw IOException("fcntl O_CLOEXEC failed", errno);
+    }
+#endif
 
     m_readFD_ = std::make_unique<FileDescriptor>(fds[0]);
     try

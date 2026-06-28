@@ -1,6 +1,7 @@
 #ifndef IO_FD_OPS_HPP
 #define IO_FD_OPS_HPP
 #include <memory>
+#include <string_view>
 
 namespace io
 {
