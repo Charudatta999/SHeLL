@@ -12,6 +12,7 @@ class Group;
 class Function;
 class While;
 class For;
+class CStyleFor;
 class If;
 class Case;
 class ArithmeticCommand;
@@ -35,6 +36,7 @@ public:
     virtual void Visit(Function&) = 0;
     virtual void Visit(While&) = 0;
     virtual void Visit(For&) = 0;
+    virtual void Visit(CStyleFor&) = 0;
     virtual void Visit(If&) = 0;
     virtual void Visit(Case&) = 0;
     virtual void Visit(ArithmeticCommand&) = 0;

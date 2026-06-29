@@ -18,6 +18,7 @@
 #include "parser/ast/commands/ArithmeticCommand.hpp"
 #include "parser/ast/commands/Case.hpp"
 #include "parser/ast/commands/For.hpp"
+#include "parser/ast/commands/CStyleFor.hpp"
 #include "parser/ast/commands/Function.hpp"
 #include "parser/ast/commands/Group.hpp"
 #include "parser/ast/commands/If.hpp"
@@ -590,6 +591,31 @@ coro::Task Executor::Visit(parser::ast::For& loop)
     {
         m_state_->SetVar(loop.GetVar(), word);
         co_await loop.GetBody()->Accept(*this);
+    }
+    co_return m_status_;
+}
+
+coro::Task Executor::Visit(parser::ast::CStyleFor& loop)
+{
+    CompoundScope scope(m_inCompound_);
+
+    if (loop.GetInit())
+        co_await loop.GetInit()->Accept(*this);
+
+    while (true)
+    {
+        if (loop.GetCond())
+        {
+            co_await loop.GetCond()->Accept(*this);
+            if (m_status_ != 0)
+                break;
+        }
+
+        if (loop.GetBody())
+            co_await loop.GetBody()->Accept(*this);
+
+        if (loop.GetUpdate())
+            co_await loop.GetUpdate()->Accept(*this);
     }
     co_return m_status_;
 }

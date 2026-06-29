@@ -66,6 +66,7 @@ private:
     coro::Task Visit(parser::ast::Function&) override;
     coro::Task Visit(parser::ast::While&) override;
     coro::Task Visit(parser::ast::For&) override;
+    coro::Task Visit(parser::ast::CStyleFor&) override;
     coro::Task Visit(parser::ast::If&) override;
     coro::Task Visit(parser::ast::Case&) override;
     coro::Task Visit(parser::ast::ArithmeticCommand&) override;
