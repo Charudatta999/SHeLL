@@ -127,6 +127,11 @@ add_library(shell_core STATIC
     src/exec/ProcessExecutor.cpp
     src/exec/CaptureOutput.cpp
 
+    # --- Line Editor ---
+    src/line/Terminal.cpp
+    src/line/History.cpp
+    src/line/LineEditor.cpp
+
     # --- Arithmetic ---
     src/arithmetic/ArithmeticEngine.cpp
     src/arithmetic/ArithmeticException.cpp

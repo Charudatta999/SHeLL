@@ -2,6 +2,9 @@
 #define SHELL_REPL_HPP
 
 #include "exec/Executor.hpp"
+#include "line/History.hpp"
+#include "line/LineEditor.hpp"
+#include "line/Terminal.hpp"
 
 #include <functional>
 #include <memory>
@@ -34,14 +37,19 @@ public:
     int Run();
 
 private:
-    void PrintPrompt();                     // write the prompt to stdout
-    bool ReadLine(std::string& line);       // read one line; false on EOF
-    int  EvalLine(const std::string& line); // tokenize -> parse -> execute
+    std::string BuildPrompt();
+    bool ReadLine(std::string& line);       // non-interactive fallback
+    int  EvalLine(const std::string& line);
 
     std::unique_ptr<ShellState> m_state_;
     std::unique_ptr<builtins::BuiltinDispatcher> m_dispatcher_;
     std::function<std::string(const std::string&)> m_cmdRunner_;
     std::unique_ptr<exec::Executor> m_executor_;
+
+    line::Terminal m_terminal_;
+    line::History m_history_;
+    std::unique_ptr<line::LineEditor> m_editor_;
+    bool m_interactive_ = false;
 };
 
 } // namespace shell
