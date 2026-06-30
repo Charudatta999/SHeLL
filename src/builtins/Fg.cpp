@@ -117,7 +117,14 @@ int Fg(const std::vector<std::string>& argv,
 
     if (argv.size() == 1 && argv[0] == "fg")
     {
-        auto job = jobs->List().back();
+        auto currJobId = jobs->CurrentId();
+        if (!currJobId.has_value())
+        {
+            std::string out = "fg: current: no such job \n";
+            io::fdops::WriteAll(ctx->errFd, out);
+            return 1;
+        }
+        auto job = jobs->FindById(currJobId.value());
         if (job.suspended)
             return ResumeSuspendedJob(job, jobs, ctx);
         tcsetpgrp(STDIN_FILENO, job.pid);

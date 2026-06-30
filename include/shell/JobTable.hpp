@@ -47,7 +47,8 @@ public:
             State state = State::Running);
     int AddSuspended(pid_t pid,
                      const std::string& command,
-                     std::shared_ptr<exec::SuspendedCoro> suspended, State state = State::Stopped);
+                     std::shared_ptr<exec::SuspendedCoro> suspended,
+                     State state = State::Stopped);
     [[nodiscard]]
     const std::vector<Job>& List() const;
     void UpdateJobState(int id, State state);
@@ -57,8 +58,11 @@ public:
     void RemoveByID(int id);
 
 private:
+    void Touch(int id);
+    void DropFromRecency(int id);
     std::vector<Job> m_jobs_;
     int m_nextId_;
+    std::vector<int> m_recency_;
 };
 
 } // namespace shell

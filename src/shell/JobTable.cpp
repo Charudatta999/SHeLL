@@ -3,6 +3,9 @@
 #include "exec/WaitStatus.hpp"
 #include "shell/ShellException.hpp"
 
+#include <algorithm>
+
+
 namespace shell
 {
 JobTable::JobTable() : m_jobs_({}), m_nextId_(1) {}
@@ -21,11 +24,13 @@ std::vector<JobTable::Job> JobTable::Reap()
             {
                 itr->state = State::Stopped;
                 jobEvents.push_back(*itr);
+                Touch(itr->id);
                 ++itr;
                 continue;
             }
             itr->state = State::Done;
             jobEvents.push_back(*itr);
+            DropFromRecency(itr->id);
             itr = m_jobs_.erase(itr);
         }
         else
@@ -44,6 +49,7 @@ int JobTable::Add(pid_t pid, const std::string& command, State state)
                        .command = command,
                        .state = state,
                        .suspended = nullptr});
+    Touch(jobId);
     return jobId;
 }
 
@@ -59,6 +65,7 @@ void JobTable::UpdateJobState(int id, State state)
         if (job.id == id)
         {
             job.state = state;
+            Touch(id);
         }
     }
 }
@@ -85,6 +92,7 @@ void JobTable::RemoveByID(int id)
             break;
         }
     }
+    DropFromRecency(id);
 }
 
 int JobTable::AddSuspended(
@@ -99,6 +107,43 @@ int JobTable::AddSuspended(
                        .command = command,
                        .state = state,
                        .suspended = std::move(suspended)});
+    Touch(jobId);
     return jobId;
+}
+
+void JobTable::Touch(int id)
+{
+    auto itr = std::ranges::find(m_recency_, id);
+
+    if (itr != m_recency_.end())
+    {
+        // Found
+        DropFromRecency(id);
+    }
+    m_recency_.push_back(id);
+}
+
+void JobTable::DropFromRecency(int id)
+{
+    auto itr = std::ranges::find(m_recency_, id);
+    if (itr != m_recency_.end())
+    {
+        m_recency_.erase(itr);
+    }
+}
+
+std::optional<int> JobTable::CurrentId() const
+{
+    return m_recency_.empty() ? std::nullopt
+                              : std::make_optional(m_recency_.back());
+}
+
+std::optional<int> JobTable::PreviousId() const
+{
+    if (m_recency_.size() < 2)
+    {
+        return std::nullopt;
+    }
+    return std::make_optional(m_recency_[m_recency_.size() - 2]);
 }
 } // namespace shell
