@@ -184,3 +184,62 @@ TEST(JobTable, RemoveByIdMissingIsNoop)
     table.RemoveByID(99); // not present
     EXPECT_EQ(table.List().size(), 1u);
 }
+
+// ─── current-job recency (#42) ───────────────────────────────────────────────
+TEST(JobTable, CurrentIdEmptyWhenNoJobs)
+{
+    shell::JobTable table;
+    EXPECT_FALSE(table.CurrentId().has_value());
+}
+
+TEST(JobTable, NewestAddedJobIsCurrent)
+{
+    shell::JobTable table;
+    table.Add(1111, "a");
+    int second = table.Add(2222, "b");
+    EXPECT_EQ(table.CurrentId(), second);
+}
+
+// The bug this feature fixes: the current job follows *use*, not start order.
+// Stop an OLDER job while a newer one exists -> the older becomes current.
+TEST(JobTable, StoppingOlderJobMakesItCurrent)
+{
+    shell::JobTable table;
+    int older = table.Add(1111, "a");
+    table.Add(2222, "b"); // "b" is current (added last)
+
+    table.UpdateJobState(older, shell::JobTable::State::Stopped);
+
+    EXPECT_EQ(table.CurrentId(), older); // not "b"
+}
+
+// When the current job ends, the previous job becomes current.
+TEST(JobTable, EndingCurrentJobPromotesPrevious)
+{
+    shell::JobTable table;
+    int first  = table.Add(1111, "a");
+    int second = table.Add(2222, "b"); // current
+    ASSERT_EQ(table.CurrentId(), second);
+
+    table.RemoveByID(second);
+    EXPECT_EQ(table.CurrentId(), first);
+}
+
+// Reaping a finished current job must drop it from recency (real fork; this is
+// the path with the erase-before-vs-after-iterator bug).
+TEST(JobTable, ReapedDoneJobStopsBeingCurrent)
+{
+    shell::JobTable table;
+    pid_t sleeper = spawnSleeping();
+    int   keep    = table.Add(sleeper, "sleeper"); // older, stays running
+    pid_t exiting = spawnExiting(0);
+    table.Add(exiting, "true"); // newest -> current
+
+    reapUntilDone(table); // collect the exited job
+
+    ASSERT_TRUE(table.CurrentId().has_value());
+    EXPECT_EQ(table.CurrentId(), keep); // survivor took over; dead job gone
+
+    ::kill(sleeper, SIGKILL);
+    ::waitpid(sleeper, nullptr, 0);
+}

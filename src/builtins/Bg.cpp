@@ -30,19 +30,28 @@ int Bg(const std::vector<std::string>& argv,
     if (argv.size() == 1 && argv[0] == "bg" && !jobs->List().empty())
     {
 
-        if (ResumeInBackground(jobs->List().back()))
+        auto currJobId = jobs->CurrentId();
+        if (!currJobId.has_value())
         {
-            jobs->UpdateJobState(jobs->List().back().id,
+            std::string out = "bg: current: no such job \n";
+            io::fdops::WriteAll(ctx->errFd, out);
+            return 1;
+        }
+        auto job = jobs->FindById(currJobId.value());
+        if (ResumeInBackground(job))
+        {
+            jobs->UpdateJobState(currJobId.value(),
                                  shell::JobTable::State::Running);
             io::fdops::WriteAll(
                 ctx->outFd,
-                "[" + std::to_string(jobs->List().back().id) + "] " +
-                    jobs->List().back().command + " &\n");
+                "[" + std::to_string(currJobId.value()) + "] " +
+                    job.command +
+                    " &\n");
         }
         else
         {
             std::string out = "bg: error: failed to start job : " +
-                              std::to_string(jobs->List().back().id);
+                              std::to_string(currJobId.value());
             io::fdops::WriteAll(ctx->errFd, out);
             return 1;
         }
