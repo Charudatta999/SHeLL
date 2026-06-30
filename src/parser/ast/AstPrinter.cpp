@@ -1,6 +1,6 @@
 #include "parser/ast/AstPrinter.hpp"
 
-// needed beacuse AstPrinter's
+// needed because AstPrinter's
 // parent class only forward declares them.
 #include "parser/ast/Ast.hpp"
 
@@ -127,6 +127,27 @@ void AstPrinter::Visit(For& node)
     std::cout << "For: " << node.GetVar() << " in";
     for (const auto& w : node.GetWords())
         std::cout << ' ' << w;
+    std::cout << "\n";
+    ++m_depth_;
+    if (node.GetBody())
+        node.GetBody()->Accept(*this);
+    --m_depth_;
+}
+
+void AstPrinter::Visit(CStyleFor& node)
+{
+    auto expr = [](const std::unique_ptr<AstNode>& part) -> std::string
+    {
+        if (auto* arith =
+                dynamic_cast<ArithmeticCommand*>(part.get()))
+            return arith->GetExpr();
+        return "";
+    };
+
+    Indent();
+    std::cout << "C-style For: ((" << expr(node.GetInit()) << ";"
+              << expr(node.GetCond()) << ";" << expr(node.GetUpdate())
+              << "));";
     std::cout << "\n";
     ++m_depth_;
     if (node.GetBody())

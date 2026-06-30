@@ -6,6 +6,7 @@
 #include "parser/ast/commands/Pipeline.hpp"
 #include "parser/ast/commands/AndOr.hpp"
 #include "parser/ast/commands/Case.hpp"
+#include "parser/ast/commands/CStyleFor.hpp"
 #include "parser/ast/commands/For.hpp"
 #include "parser/ast/commands/Function.hpp"
 #include "parser/ast/commands/Group.hpp"

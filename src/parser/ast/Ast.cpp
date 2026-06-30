@@ -51,6 +51,11 @@ void For::Accept(AstVisitor& visitor)
     visitor.Visit(*this);
 }
 
+void CStyleFor::Accept(AstVisitor& visitor)
+{
+    visitor.Visit(*this);
+}
+
 void If::Accept(AstVisitor& visitor)
 {
     visitor.Visit(*this);
@@ -107,6 +112,11 @@ coro::Task While::Accept(ExecVisitor& visitor)
 }
 
 coro::Task For::Accept(ExecVisitor& visitor)
+{
+    return visitor.Visit(*this);
+}
+
+coro::Task CStyleFor::Accept(ExecVisitor& visitor)
 {
     return visitor.Visit(*this);
 }

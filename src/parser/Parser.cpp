@@ -11,7 +11,9 @@
 #include "parser/ast/commands/SimpleCommand.hpp"
 #include "parser/ast/commands/Subshell.hpp"
 #include "parser/ast/commands/While.hpp"
+#include "parser/ast/commands/CStyleFor.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <memory>
 #include <string>
@@ -534,13 +536,17 @@ std::unique_ptr<ast::AstNode> Parser::ParseFor()
 {
     bool isFor = Check(TokenType::For);
     Advance();
+    if(Check(TokenType::DLParen))
+    {
+        return ParseCStyleFor();
+    }
     std::vector<std::string> words;
     std::unique_ptr<ast::AstNode> body;
     std::string var;
     if (isFor)
     {
         var =
-            Expect(TokenType::Word, "Wrong Condiiton for loop").value;
+            Expect(TokenType::Word, "Wrong Condition for loop").value;
         if (Match(TokenType::In))
         {
             while (Check(TokenType::Word))
@@ -557,7 +563,7 @@ std::unique_ptr<ast::AstNode> Parser::ParseFor()
     else
     {
         var =
-            Expect(TokenType::Word, "Wrong Condiiton for loop").value;
+            Expect(TokenType::Word, "Wrong Condition for loop").value;
         Expect(TokenType::LParen,
                "Invalid syntax for 'For each loop'");
         while (Check(TokenType::Word))
@@ -574,6 +580,52 @@ std::unique_ptr<ast::AstNode> Parser::ParseFor()
     return std::make_unique<ast::For>(std::move(var),
                                       std::move(words),
                                       std::move(body));
+}
+
+std::unique_ptr<ast::AstNode> Parser::ParseCStyleFor()
+{
+    const std::string expr = Advance().value;
+
+    std::vector<std::string> parts(3);
+    std::size_t partIdx = 0;
+    int depth = 0;
+    for (auto ch : expr)
+    {
+        if (ch == '(')
+            ++depth;
+        else if (ch == ')')
+            --depth;
+
+        if (ch == ';' && depth == 0 && partIdx < 2)
+        {
+            ++partIdx;
+        }
+        else
+        {
+            parts[partIdx] += ch;
+        }
+    }
+
+    if (partIdx != 2)
+    {
+        throw ParserException("parse error near" + (partIdx==0?"((":parts[partIdx - 1]));
+    }
+
+    (void)Match(TokenType::Semi);
+    SkipNewlines();
+    Expect(TokenType::Do, "Invalid syntax for 'For loop'");
+    std::unique_ptr<ast::AstNode> body = ExpectList("in for body");
+    Expect(TokenType::Done, "Invalid syntax for 'For loop'");
+
+    auto makeArith = [](const std::string& s) -> std::unique_ptr<ast::AstNode>
+    {
+        auto st = s.find_first_not_of(" \t");
+        if (st == std::string::npos)
+            return nullptr;
+        return std::make_unique<ast::ArithmeticCommand>(s.substr(st));
+    };
+
+    return std::make_unique<ast::CStyleFor>(makeArith(parts[0]), makeArith(parts[1]), makeArith(parts[2]), std::move(body));
 }
 
 std::unique_ptr<ast::AstNode> Parser::ParseIf()
