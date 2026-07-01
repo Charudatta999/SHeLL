@@ -147,6 +147,33 @@ std::optional<int> JobTable::PreviousId() const
     return std::make_optional(m_recency_[m_recency_.size() - 2]);
 }
 
+// Find the unique job whose command matches needle: by substring when
+// substring is true, otherwise by prefix. Throws when nothing matches or
+// more than one job does.
+JobTable::Job& JobTable::MatchByCommand(const std::string& needle,
+                              bool substring)
+{
+    if (needle.empty())
+        throw ShellException("no such job", 1);
+
+    Job* match = nullptr;
+    for (auto& job : m_jobs_)
+    {
+        bool hit = substring
+                       ? job.command.find(needle) != std::string::npos
+                       : job.command.starts_with(needle);
+        if (hit)
+        {
+            if (match != nullptr)
+                throw ShellException("ambiguous job spec", 1);
+            match = &job;
+        }
+    }
+    if (match == nullptr)
+        throw ShellException("no such job", 1);
+    return *match;
+}
+
 JobTable::Job& JobTable::ResolveJobSpec(const std::string& cmd)
 {
     try
@@ -171,13 +198,18 @@ JobTable::Job& JobTable::ResolveJobSpec(const std::string& cmd)
         std::string spec = cmd;
         if (!spec.empty() && spec[0] == '%')
             spec.erase(0, 1);
+
         int value = 0;
         auto [ptr, ec] = std::from_chars(spec.data(),
                                          spec.data() + spec.size(),
                                          value);
-        if (ec != std::errc{} || ptr != spec.data() + spec.size())
-            throw ShellException("no such job", 1);
-        return FindById(value);
+        if (ec == std::errc{} && ptr == spec.data() + spec.size())
+            return FindById(value);
+        // %?string matches a command by substring, %string by prefix.
+        else if (!spec.empty() && spec[0] == '?')
+            return MatchByCommand(spec.substr(1), true);
+        else
+            return MatchByCommand(spec, false);
     }
     catch (const ShellException&)
     {

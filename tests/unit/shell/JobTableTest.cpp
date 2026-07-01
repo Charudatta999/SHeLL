@@ -243,3 +243,92 @@ TEST(JobTable, ReapedDoneJobStopsBeingCurrent)
     ::kill(sleeper, SIGKILL);
     ::waitpid(sleeper, nullptr, 0);
 }
+
+// ─── job-spec resolution (#42) ───────────────────────────────────────────────
+TEST(JobTable, ResolveJobSpecNumericById)
+{
+    shell::JobTable table;
+    table.Add(1111, "a");
+    int id = table.Add(2222, "b");
+
+    EXPECT_EQ(table.ResolveJobSpec("%2").id, id);   // %n form
+    EXPECT_EQ(table.ResolveJobSpec("2").id, id);    // bare n form
+}
+
+TEST(JobTable, ResolveJobSpecNumericMissingThrows)
+{
+    shell::JobTable table;
+    table.Add(1111, "a");
+    EXPECT_THROW((void)table.ResolveJobSpec("%9"), shell::ShellException);
+}
+
+TEST(JobTable, ResolveJobSpecCurrentForms)
+{
+    shell::JobTable table;
+    table.Add(1111, "a");
+    int current = table.Add(2222, "b"); // newest -> current
+
+    EXPECT_EQ(table.ResolveJobSpec("%").id, current);
+    EXPECT_EQ(table.ResolveJobSpec("%%").id, current);
+    EXPECT_EQ(table.ResolveJobSpec("%+").id, current);
+    EXPECT_EQ(table.ResolveJobSpec("").id, current); // no-arg
+}
+
+TEST(JobTable, ResolveJobSpecPreviousForm)
+{
+    shell::JobTable table;
+    int previous = table.Add(1111, "a");
+    table.Add(2222, "b"); // newest -> current, so "a" is previous
+
+    EXPECT_EQ(table.ResolveJobSpec("%-").id, previous);
+}
+
+// Regression: %- with a single job -> PreviousId() is empty. Must throw a
+// ShellException, not std::bad_optional_access from an unguarded .value().
+TEST(JobTable, ResolveJobSpecPreviousWithOneJobThrows)
+{
+    shell::JobTable table;
+    table.Add(1111, "only");
+    EXPECT_THROW((void)table.ResolveJobSpec("%-"), shell::ShellException);
+}
+
+TEST(JobTable, ResolveJobSpecPrefixMatch)
+{
+    shell::JobTable table;
+    table.Add(1111, "vim notes.txt");
+    int build = table.Add(2222, "make build");
+
+    EXPECT_EQ(table.ResolveJobSpec("%make").id, build);
+}
+
+TEST(JobTable, ResolveJobSpecSubstringMatch)
+{
+    shell::JobTable table;
+    int edit = table.Add(1111, "vim notes.txt");
+    table.Add(2222, "make build");
+
+    EXPECT_EQ(table.ResolveJobSpec("%?notes").id, edit); // mid-command
+}
+
+TEST(JobTable, ResolveJobSpecPrefixMissesSubstring)
+{
+    shell::JobTable table;
+    table.Add(1111, "vim notes.txt");
+    // "notes" is present but not a prefix -> %string must not match it.
+    EXPECT_THROW((void)table.ResolveJobSpec("%notes"), shell::ShellException);
+}
+
+TEST(JobTable, ResolveJobSpecAmbiguousThrows)
+{
+    shell::JobTable table;
+    table.Add(1111, "make build");
+    table.Add(2222, "make test"); // both start with "make"
+    EXPECT_THROW((void)table.ResolveJobSpec("%make"), shell::ShellException);
+}
+
+TEST(JobTable, ResolveJobSpecUnknownStringThrows)
+{
+    shell::JobTable table;
+    table.Add(1111, "vim");
+    EXPECT_THROW((void)table.ResolveJobSpec("%emacs"), shell::ShellException);
+}
