@@ -146,24 +146,11 @@ int Fg(const std::vector<std::string>& argv,
         }
     }
     std::string cmd = argv[1];
-    int res = 1;
-    if (!cmd.empty() && cmd[0] == '%')
-    {
-        cmd.erase(0, 1);
-    }
-    int value = 0;
-    auto [ptr, ec] =
-        std::from_chars(cmd.data(), cmd.data() + cmd.size(), value);
-    if (ec != std::errc{} || ptr != cmd.data() + cmd.size())
-    {
-        std::string out = "fg: warning:" + cmd + ": no such job\n";
-        io::fdops::WriteAll(ctx->errFd, out);
-        return 1;
-    }
 
+    int res = 1;
     try
     {
-        auto job = jobs->FindById(value);
+        auto& job = jobs->ResolveJobSpec(cmd);
         if (job.suspended)
             return ResumeSuspendedJob(job, jobs, ctx);
         if (Resume(job))
@@ -183,7 +170,7 @@ int Fg(const std::vector<std::string>& argv,
     }
     catch (shell::ShellException& ex)
     {
-        std::string out = "fg: error: " + cmd + ex.what() + "\n";
+        std::string out = "fg: error: " + cmd + " "+ ex.what() + "\n";
         io::fdops::WriteAll(ctx->errFd, out);
     }
     return res;

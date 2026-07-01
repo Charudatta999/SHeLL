@@ -61,24 +61,10 @@ int Bg(const std::vector<std::string>& argv,
     {
         auto cmd = argv[index];
 
-        if (cmd[0] == '%')
-        {
-            cmd.erase(0, 1);
-        }
-        int value = 0;
-        auto [ptr, ec] = std::from_chars(cmd.data(),
-                                         cmd.data() + cmd.size(),
-                                         value);
-        if (ec != std::errc{} || ptr != cmd.data() + cmd.size())
-        {
-            std::string out =
-                "bg: warning:" + cmd + ": no such job\n";
-            io::fdops::WriteAll(ctx->errFd, out);
-            continue;
-        }
+
         try
         {
-            auto job = jobs->FindById(value);
+            auto& job = jobs->ResolveJobSpec(cmd);
             if (ResumeInBackground(job))
             {
                 jobs->UpdateJobState(job.id,
@@ -91,13 +77,13 @@ int Bg(const std::vector<std::string>& argv,
             {
                 std::string out =
                     "bg: error: failed to start job : " +
-                    std::to_string(value) + "\n";
+                    std::to_string(job.id) + "\n";
                 io::fdops::WriteAll(ctx->errFd, out);
             }
         }
         catch (shell::ShellException& ex)
         {
-            std::string out = "bg: error:" + cmd + ex.what() + "\n";
+            std::string out = "bg: error:" + cmd + " " + ex.what() + "\n";
             io::fdops::WriteAll(ctx->errFd, out);
             continue;
         }

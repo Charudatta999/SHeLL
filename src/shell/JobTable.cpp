@@ -4,7 +4,7 @@
 #include "shell/ShellException.hpp"
 
 #include <algorithm>
-
+#include <charconv>
 
 namespace shell
 {
@@ -145,5 +145,43 @@ std::optional<int> JobTable::PreviousId() const
         return std::nullopt;
     }
     return std::make_optional(m_recency_[m_recency_.size() - 2]);
+}
+
+JobTable::Job& JobTable::ResolveJobSpec(const std::string& cmd)
+{
+    try
+    {
+
+        if (cmd == "%" || cmd == "%%" || cmd == "%+" || cmd.empty())
+        {
+            if(!CurrentId().has_value())
+            {
+                throw ShellException("no such job", 1);
+            }
+            return FindById(CurrentId().value());
+        }
+        if (cmd == "%-")
+        {
+            if(!PreviousId().has_value())
+            {
+                throw ShellException("no such job", 1);
+            }
+            return FindById(PreviousId().value());
+        }
+        std::string spec = cmd;
+        if (!spec.empty() && spec[0] == '%')
+            spec.erase(0, 1);
+        int value = 0;
+        auto [ptr, ec] = std::from_chars(spec.data(),
+                                         spec.data() + spec.size(),
+                                         value);
+        if (ec != std::errc{} || ptr != spec.data() + spec.size())
+            throw ShellException("no such job", 1);
+        return FindById(value);
+    }
+    catch (const ShellException&)
+    {
+        throw ShellException("no such job", 1);
+    }
 }
 } // namespace shell
