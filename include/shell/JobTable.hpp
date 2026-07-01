@@ -2,10 +2,10 @@
 #define SHELL_JOBTABLE_HPP
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <sys/types.h>
 #include <vector>
-
 namespace exec
 {
 struct SuspendedCoro;
@@ -57,8 +57,16 @@ public:
 
     void RemoveByID(int id);
 
-private:
-    void Touch(int id);
+    [[nodiscard]]
+    std::optional<int> CurrentId() const;
+
+    [[nodiscard]]
+    std::optional<int> PreviousId() const;
+
+    [[nodiscard]]
+    Job& ResolveJobSpec(const std::string&);
+
+    private : void Touch(int id);
     void DropFromRecency(int id);
     std::vector<Job> m_jobs_;
     int m_nextId_;
