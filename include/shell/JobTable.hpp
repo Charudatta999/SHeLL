@@ -68,6 +68,7 @@ public:
 
     private : void Touch(int id);
     void DropFromRecency(int id);
+    Job& MatchByCommand(const std::string& needle, bool substring);
     std::vector<Job> m_jobs_;
     int m_nextId_;
     std::vector<int> m_recency_;
