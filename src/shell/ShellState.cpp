@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <new>
+#include <termios.h>
 #include <unistd.h>
 
 namespace shell
@@ -30,6 +31,8 @@ ShellState::ShellState(
     // Tests and non-interactive use must not attempt terminal handoff.
     , m_jobControl_(false)
     , m_sigMgr_(std::make_unique<signals::SignalManager>())
+    ,m_savedTermios_{}
+    ,m_hasSavedTermios_(false)
 {
 }
 
@@ -241,5 +244,26 @@ bool ShellState::IsJobControlEnabled() const
 const std::unique_ptr<signals::SignalManager>& ShellState::GetSignalMgr()
 {
     return m_sigMgr_;
+}
+
+bool ShellState::HasSavedTerminalModes() const
+{
+    return m_hasSavedTermios_;
+}
+
+bool ShellState::RestoreTerminalModes()
+{
+    if (!isatty(STDIN_FILENO) || !m_hasSavedTermios_)
+        return false;
+
+    return tcsetattr(STDIN_FILENO, TCSADRAIN, &m_savedTermios_) != -1;
+}
+
+void ShellState::SaveTerminalModes()
+{
+    if (!isatty(STDIN_FILENO))
+        return;
+    auto res = tcgetattr(STDIN_FILENO, &m_savedTermios_);
+    m_hasSavedTermios_ = (res != -1);
 }
 } // namespace shell
