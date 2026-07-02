@@ -1,8 +1,12 @@
 #include "exec/ProcessExecutor.hpp"
 
 #include "exec/Redirection.hpp"
+#include "io/FdOps.hpp"
 #include "utils/ErrorCodes.hpp"
 
+
+#include <asm-generic/errno.h>
+#include <cerrno>
 #include <cstdlib>
 #include <sys/types.h>
 #include <unistd.h>
@@ -73,7 +77,22 @@ void ProcessExecutor::Exec(const CommandSpec& spec)
         argv.push_back(const_cast<char*>(arg.c_str()));
     argv.push_back(nullptr);
     execvp(spec.argv[0].c_str(), argv.data());
-    _exit(EXIT_FAILURE);
+    if(errno == ENOENT)
+    {
+        io::fdops::WriteAll(STDERR_FILENO, "command not found: " + spec.argv[0] + "\n");
+        _exit(EXIT_COMMAND_NOT_FOUND);
+    }
+    else if (errno == EACCES)
+    {
+        io::fdops::WriteAll(STDERR_FILENO,
+                            "permission denied: " + spec.argv[0] +
+                                "\n");
+        _exit(EXIT_PERMISSION_DENIED);
+    }
+    else
+    {
+        _exit(EXIT_FAILURE);
+    }
 }
 
 int ProcessExecutor::Wait(WaitMode mode)
