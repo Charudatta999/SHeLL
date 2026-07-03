@@ -31,7 +31,7 @@ ShellState::ShellState(
     // Tests and non-interactive use must not attempt terminal handoff.
     , m_jobControl_(false)
     , m_sigMgr_(std::make_unique<signals::SignalManager>())
-    ,m_savedTermios_{}
+    ,m_savedTermios_{ }
     ,m_hasSavedTermios_(false)
 {
 }

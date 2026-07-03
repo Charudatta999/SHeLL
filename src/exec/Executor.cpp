@@ -16,9 +16,9 @@
 #include "parser/ast/Redirect.hpp"
 #include "parser/ast/commands/AndOr.hpp"
 #include "parser/ast/commands/ArithmeticCommand.hpp"
+#include "parser/ast/commands/CStyleFor.hpp"
 #include "parser/ast/commands/Case.hpp"
 #include "parser/ast/commands/For.hpp"
-#include "parser/ast/commands/CStyleFor.hpp"
 #include "parser/ast/commands/Function.hpp"
 #include "parser/ast/commands/Group.hpp"
 #include "parser/ast/commands/If.hpp"
@@ -320,10 +320,12 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
         WaitStatus status(runner.Pid(), waitMode);
 
         if (waitMode == WaitMode::Foreground)
+        {
             tcsetpgrp(STDIN_FILENO, getpgrp());
-
-        auto state = status.IsStopped() ? State::Stopped
-                                        : State::Done;
+            m_state_->RestoreTerminalModes();
+        }
+        auto state =
+            status.IsStopped() ? State::Stopped : State::Done;
         if (state == State::Stopped && m_inCompound_)
         {
             m_suspendedPgid_ = runner.Pid();
@@ -333,7 +335,8 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
         }
         else
         {
-            RecordStoppedJob(state, runner.Pid(),
+            RecordStoppedJob(state,
+                             runner.Pid(),
                              command.SourceText());
         }
         if (state == State::Done)
@@ -362,7 +365,9 @@ std::vector<ProcessExecutor> Executor::LaunchStages(
             [&, idx]()
             {
                 sigMgr->ResetForChild();
-                SetupChildFds(pipes, idx, stages.size(),
+                SetupChildFds(pipes,
+                              idx,
+                              stages.size(),
                               stages[idx]->Redirects());
                 m_inForkedChild_ = true;
                 RunToCompletion(stages[idx]);
@@ -374,9 +379,9 @@ std::vector<ProcessExecutor> Executor::LaunchStages(
     return runners;
 }
 
-std::vector<std::unique_ptr<WaitStatus>> Executor::WaitStages(
-    const std::vector<ProcessExecutor>& runners,
-    WaitMode mode)
+std::vector<std::unique_ptr<WaitStatus>>
+Executor::WaitStages(const std::vector<ProcessExecutor>& runners,
+                     WaitMode mode)
 {
     if (mode == WaitMode::Foreground)
         tcsetpgrp(STDIN_FILENO, runners[0].Pid());
@@ -387,7 +392,10 @@ std::vector<std::unique_ptr<WaitStatus>> Executor::WaitStages(
             std::make_unique<WaitStatus>(runners[i].Pid(), mode);
 
     if (mode == WaitMode::Foreground)
+    {
         tcsetpgrp(STDIN_FILENO, getpgrp());
+        m_state_->RestoreTerminalModes();
+    }
 
     return statuses;
 }
@@ -435,8 +443,7 @@ coro::Task Executor::Visit(parser::ast::Pipeline& pipeline)
         throw ExecException(
             std::string("SHELL [exec] [Pipeline] : Failed to run "
                         "command: ") +
-                ex.what() +
-                " with errno: " + std::to_string(errno),
+                ex.what() + " with errno: " + std::to_string(errno),
             ex.GetErrorCode());
     }
 
@@ -453,8 +460,8 @@ coro::Task Executor::Visit(parser::ast::Pipeline& pipeline)
                         : WaitMode::UntilExit;
     auto statuses = WaitStages(runners, waitMode);
 
-    auto state = statuses.back()->IsStopped() ? State::Stopped
-                                              : State::Done;
+    auto state =
+        statuses.back()->IsStopped() ? State::Stopped : State::Done;
     if (state == State::Stopped && m_inCompound_)
     {
         m_suspendedPgid_ = runners[0].Pid();
@@ -464,13 +471,15 @@ coro::Task Executor::Visit(parser::ast::Pipeline& pipeline)
     }
     else
     {
-        RecordStoppedJob(state, runners[0].Pid(),
+        RecordStoppedJob(state,
+                         runners[0].Pid(),
                          pipeline.SourceText());
     }
 
     if (state == State::Done)
-        m_status_ = CollectStatus(
-            statuses, m_state_->IsOptionEnabled("pipefail"));
+        m_status_ =
+            CollectStatus(statuses,
+                          m_state_->IsOptionEnabled("pipefail"));
 
     if (pipeline.Bang())
         m_status_ = (m_status_ == 0) ? 1 : 0;

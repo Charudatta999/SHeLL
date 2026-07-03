@@ -77,6 +77,7 @@ int Repl::Run()
         tcsetpgrp(STDIN_FILENO, getpgrp());
         m_state_->GetSignalMgr()->SetupInteractiveSignals();
         m_state_->EnableJobControl(true);
+        m_state_->SaveTerminalModes();
         m_terminal_.EnableRawMode();
     }
 
