@@ -26,6 +26,7 @@ int HandleForegroundOutcome(
     const std::unique_ptr<builtins::BuiltinContext>& ctx)
 {
     tcsetpgrp(STDIN_FILENO, getpgrp());
+    ctx->m_state_->RestoreTerminalModes();
     if (status.IsStopped())
     {
         jobs->UpdateJobState(job.id, shell::JobTable::State::Stopped);
@@ -64,7 +65,7 @@ int ResumeSuspendedJob(
     // Take the terminal back before driving the tail; the && tail runs in
     // the shell's own foreground.
     tcsetpgrp(STDIN_FILENO, getpgrp());
-
+    ctx->m_state_->RestoreTerminalModes();
     if (status.IsStopped())
     {
         // The leaf stopped again before finishing — nothing to drive yet;
