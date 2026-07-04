@@ -43,5 +43,14 @@ int Fg(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ct
 int Bg(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
 
 int Wait(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ctx);
+
+int Break(const std::vector<std::string>& argv,
+          std::unique_ptr<BuiltinContext>& ctx);
+
+int Continue(const std::vector<std::string>& argv,
+             std::unique_ptr<BuiltinContext>& ctx);
+
+int Return(const std::vector<std::string>& argv,
+           std::unique_ptr<BuiltinContext>& ctx);
 } // namespace builtins
 #endif // BUILTIN_BUILTIN_FUNCTION_HPP

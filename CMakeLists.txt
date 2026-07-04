@@ -146,6 +146,9 @@ add_library(shell_core STATIC
     src/builtins/Bg.cpp
     src/builtins/Fg.cpp
     src/builtins/Wait.cpp
+    src/builtins/Break.cpp
+    src/builtins/Continue.cpp
+    src/builtins/Return.cpp
 
     # --- Coroutines ---
     src/coro/Task.cpp
