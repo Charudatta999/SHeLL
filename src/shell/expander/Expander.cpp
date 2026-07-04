@@ -6,12 +6,19 @@
 #include "shell/ShellArithmeticVars.hpp"
 #include "shell/ShellState.hpp"
 
+#include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <format>
 #include <glob.h>
 #include <memory>
+#include <optional>
 #include <string>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 namespace shell::expander
@@ -114,6 +121,174 @@ std::string ReadCommandBody(const std::string& word, std::size_t& pos)
     throw parser::ParserException(
         "unterminated command substitution");
 }
+
+std::optional<int> ToInteger(const std::string& str)
+{
+    if (str.empty())
+        return std::nullopt;
+
+    int value = 0;
+    const char* end = str.data() + str.size();
+    auto [ptr, ec] = std::from_chars(str.data(), end, value);
+    if (ec == std::errc() && ptr == end)
+        return value;
+    return std::nullopt;
+}
+
+bool HasLeadingZero(const std::string& str)
+{
+    std::size_t i =
+        (!str.empty() && (str[0] == '+' || str[0] == '-')) ? 1 : 0;
+    return str.size() - i > 1 && str[i] == '0';
+}
+
+std::vector<std::string> SplitOnRange(const std::string& amble)
+{
+    std::vector<std::string> out;
+    std::size_t start = 0;
+    std::size_t pos;
+    while ((pos = amble.find("..", start)) != std::string::npos)
+    {
+        out.push_back(amble.substr(start, pos - start));
+        start = pos + 2;
+    }
+    out.push_back(amble.substr(start));
+    return out;
+}
+
+std::vector<std::string> GenerateNumeric(int low,
+                                         int high,
+                                         int step,
+                                         int width)
+{
+    std::vector<std::string> out;
+    if (low <= high)
+        for (int v = low; v <= high; v += step)
+            out.push_back(std::format("{:0{}d}", v, width));
+    else
+        for (int v = low; v >= high; v -= step)
+            out.push_back(std::format("{:0{}d}", v, width));
+    return out;
+}
+
+std::vector<std::string> GenerateChar(char low, char high, int step)
+{
+    std::vector<std::string> out;
+    if (low <= high)
+        for (int c = low; c <= high; c += step)
+            out.push_back(std::string(1, static_cast<char>(c)));
+    else
+        for (int c = low; c >= high; c -= step)
+            out.push_back(std::string(1, static_cast<char>(c)));
+    return out;
+}
+
+std::vector<std::string> ExpandRange(const std::string& amble)
+{
+    auto tokens = SplitOnRange(amble);
+    if (tokens.size() < 2 || tokens.size() > 3)
+        return {};
+
+    const std::string& low = tokens[0];
+    const std::string& high = tokens[1];
+
+    int step = 1;
+    if (tokens.size() == 3)
+    {
+        auto parsed = ToInteger(tokens[2]);
+        if (!parsed)
+            return {};
+        step = *parsed;
+    }
+    if (step == 0)
+        return {};
+    step = std::abs(step);
+
+    auto lowInt = ToInteger(low);
+    auto highInt = ToInteger(high);
+    if (lowInt && highInt)
+    {
+        const bool pad = HasLeadingZero(low) || HasLeadingZero(high);
+        const int width =
+            pad ? static_cast<int>(std::max(low.size(), high.size()))
+                : 0;
+        return GenerateNumeric(*lowInt, *highInt, step, width);
+    }
+    if (low.size() == 1 && high.size() == 1 &&
+        std::isalpha(static_cast<unsigned char>(low[0])) &&
+        std::isalpha(static_cast<unsigned char>(high[0])))
+        return GenerateChar(low[0], high[0], step);
+
+    return {};
+}
+
+std::vector<std::string> SplitTopLevelCommas(const std::string& amble)
+{
+    std::vector<std::string> parts;
+    std::string cur;
+    int depth = 0;
+    for (char c : amble)
+    {
+        if (c == '{')
+        {
+            ++depth;
+            cur += c;
+        }
+        else if (c == '}')
+        {
+            --depth;
+            cur += c;
+        }
+        else if (c == ',' && depth == 0)
+        {
+            parts.push_back(cur);
+            cur.clear();
+        }
+        else
+        {
+            cur += c;
+        }
+    }
+    parts.push_back(cur);
+    return parts;
+}
+
+std::vector<std::string> ExpandAmble(const std::string& amble)
+{
+    auto parts = SplitTopLevelCommas(amble);
+    if (parts.size() >= 2)
+        return parts;
+    return ExpandRange(amble);
+}
+
+int MatchClose(const std::string& word, std::size_t openIdx)
+{
+    int depth = 0;
+    for (std::size_t i = openIdx; i < word.size(); ++i)
+    {
+        if (word[i] == '{')
+            ++depth;
+        else if (word[i] == '}')
+        {
+            --depth;
+            if (depth == 0)
+                return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+std::pair<int, int> FindFirstGroup(const std::string& word)
+{
+    for (std::size_t i = 0; i < word.size(); ++i)
+        if (word[i] == '{')
+        {
+            int close = MatchClose(word, i);
+            if (close != -1)
+                return {static_cast<int>(i), close};
+        }
+    return {-1, -1};
+}
 } // namespace
 
 std::vector<std::string> Expand(const std::string& word,
@@ -205,5 +380,35 @@ std::vector<std::string> Expand(const std::string& word,
         globfree(&globResult);
     }
     return {out};
+}
+
+std::vector<std::string> BraceExpand(const std::string& word)
+{
+    auto [openIdx, closeIdx] = FindFirstGroup(word);
+    if (openIdx == -1)
+        return {word};
+
+    const auto open = static_cast<std::size_t>(openIdx);
+    const auto close = static_cast<std::size_t>(closeIdx);
+    const std::string prefix = word.substr(0, open);
+    const std::string amble = word.substr(open + 1, close - open - 1);
+    const std::string suffix = word.substr(close + 1);
+
+    auto parts = ExpandAmble(amble);
+    auto tails = BraceExpand(suffix);
+
+    std::vector<std::string> result;
+    if (parts.empty())
+    {
+        for (const auto& tail : tails)
+            result.push_back(prefix + "{" + amble + "}" + tail);
+        return result;
+    }
+
+    for (const auto& part : parts)
+        for (const auto& mid : BraceExpand(part))
+            for (const auto& tail : tails)
+                result.push_back(prefix + mid + tail);
+    return result;
 }
 } // namespace shell::expander

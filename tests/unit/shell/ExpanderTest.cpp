@@ -279,3 +279,145 @@ TEST(Expander, ExitCodeEmbeddedInWord)
     s->SetLastCommandExitCode(3);
     EXPECT_EQ(expand1("rc=$?.", s), "rc=3.");
 }
+
+// ─── brace expansion (textual, stateless) ────────────────────────────────────
+namespace
+{
+using Words = std::vector<std::string>;
+Words brace(const std::string& word)
+{
+    return shell::expander::BraceExpand(word);
+}
+} // namespace
+
+TEST(BraceExpand, NoBracesUnchanged)
+{
+    EXPECT_EQ(brace("hello"), (Words{"hello"}));
+}
+
+TEST(BraceExpand, EmptyStringUnchanged)
+{
+    EXPECT_EQ(brace(""), (Words{""}));
+}
+
+TEST(BraceExpand, SimpleCommaList)
+{
+    EXPECT_EQ(brace("{a,b,c}"), (Words{"a", "b", "c"}));
+}
+
+TEST(BraceExpand, ListWithPreambleAndPostscript)
+{
+    EXPECT_EQ(brace("a{b,c}d"), (Words{"abd", "acd"}));
+}
+
+TEST(BraceExpand, EmptyAlternative)
+{
+    EXPECT_EQ(brace("a{,b}c"), (Words{"ac", "abc"}));
+}
+
+TEST(BraceExpand, CrossProductOfAdjacentGroups)
+{
+    EXPECT_EQ(brace("{a,b}{1,2}"),
+              (Words{"a1", "a2", "b1", "b2"}));
+}
+
+TEST(BraceExpand, Nested)
+{
+    EXPECT_EQ(brace("{a,b{c,d}}"), (Words{"a", "bc", "bd"}));
+}
+
+TEST(BraceExpand, NestedCommaIsScoped)
+{
+    EXPECT_EQ(brace("{a,b{c,d}e}"), (Words{"a", "bce", "bde"}));
+}
+
+TEST(BraceExpand, NumericRange)
+{
+    EXPECT_EQ(brace("{1..5}"), (Words{"1", "2", "3", "4", "5"}));
+}
+
+TEST(BraceExpand, NumericRangeDescending)
+{
+    EXPECT_EQ(brace("{5..1}"), (Words{"5", "4", "3", "2", "1"}));
+}
+
+TEST(BraceExpand, NumericRangeWithStep)
+{
+    EXPECT_EQ(brace("{1..9..2}"),
+              (Words{"1", "3", "5", "7", "9"}));
+}
+
+TEST(BraceExpand, NumericRangeNegative)
+{
+    EXPECT_EQ(brace("{-2..2}"),
+              (Words{"-2", "-1", "0", "1", "2"}));
+}
+
+TEST(BraceExpand, ZeroPaddedRange)
+{
+    EXPECT_EQ(brace("{01..10}"),
+              (Words{"01", "02", "03", "04", "05", "06", "07", "08",
+                     "09", "10"}));
+}
+
+TEST(BraceExpand, ZeroPaddedWidthFromWidestOperand)
+{
+    EXPECT_EQ(brace("{001..10}"),
+              (Words{"001", "002", "003", "004", "005", "006", "007",
+                     "008", "009", "010"}));
+}
+
+TEST(BraceExpand, PlainZeroNotPadded)
+{
+    EXPECT_EQ(brace("{0..10}"),
+              (Words{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                     "10"}));
+}
+
+TEST(BraceExpand, CharRange)
+{
+    EXPECT_EQ(brace("{a..e}"),
+              (Words{"a", "b", "c", "d", "e"}));
+}
+
+TEST(BraceExpand, CharRangeDescending)
+{
+    EXPECT_EQ(brace("{e..a}"),
+              (Words{"e", "d", "c", "b", "a"}));
+}
+
+TEST(BraceExpand, CharRangeWithStep)
+{
+    EXPECT_EQ(brace("{a..g..2}"), (Words{"a", "c", "e", "g"}));
+}
+
+TEST(BraceExpand, PassthroughNoCommaOrRange)
+{
+    EXPECT_EQ(brace("{abc}"), (Words{"{abc}"}));
+}
+
+TEST(BraceExpand, PassthroughEmptyBraces)
+{
+    EXPECT_EQ(brace("{}"), (Words{"{}"}));
+}
+
+TEST(BraceExpand, PassthroughBadRange)
+{
+    EXPECT_EQ(brace("{1..x}"), (Words{"{1..x}"}));
+}
+
+TEST(BraceExpand, PassthroughUnbalanced)
+{
+    EXPECT_EQ(brace("{a,b"), (Words{"{a,b"}));
+}
+
+TEST(BraceExpand, PassthroughFollowedByValidGroup)
+{
+    EXPECT_EQ(brace("{abc}{d,e}"),
+              (Words{"{abc}d", "{abc}e"}));
+}
+
+TEST(BraceExpand, SingleAlternativeNoComma)
+{
+    EXPECT_EQ(brace("{a}"), (Words{"{a}"}));
+}

@@ -255,10 +255,13 @@ Executor::ExpandArgv(const std::vector<std::string>& argv)
     std::vector<std::string> out;
     for (const auto& word : argv)
     {
-        auto pieces =
-            shell::expander::Expand(word, m_state_, m_cmdRunner_);
-        for (auto& piece : pieces)
-            out.push_back(std::move(piece));
+        for (const auto& braced : shell::expander::BraceExpand(word))
+        {
+            auto pieces =
+                shell::expander::Expand(braced, m_state_, m_cmdRunner_);
+            for (auto& piece : pieces)
+                out.push_back(std::move(piece));
+        }
     }
     return out;
 }
