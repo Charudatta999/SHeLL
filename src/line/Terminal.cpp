@@ -1,6 +1,7 @@
 #include "line/Terminal.hpp"
 
-#include <cstdio>
+#include <format>
+#include <string>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <unistd.h>
@@ -92,6 +93,8 @@ KeyEvent Terminal::ReadKey()
                 return {.key = Key::CtrlW};
             case 25:
                 return {.key = Key::CtrlY};
+            case 26:
+                return {.key = Key::Tab};
             default:
                 return {.key = Key::Unknown};
         }
@@ -106,13 +109,17 @@ bool Terminal::HasPendingInput(int timeoutMs)
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
 
-    struct timeval timeout;
+    struct timeval timeout{};
     timeout.tv_sec = timeoutMs / 1000;
-    timeout.tv_usec = (timeoutMs % 1000) * 1000;
+    timeout.tv_usec = (timeoutMs % 1000) * 1000L;
 
     return select(STDIN_FILENO + 1, &fds, nullptr, nullptr, &timeout) > 0;
 }
 
+// A terminal escape parser is inherently one large branch on the byte
+// sequence; splitting it would obscure the protocol, so the complexity is
+// suppressed rather than refactored.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 KeyEvent Terminal::ParseEscapeSequence()
 {
     if (!HasPendingInput(50))
@@ -182,6 +189,7 @@ KeyEvent Terminal::ParseEscapeSequence()
             case 'D': return {.key = Key::Left};
             case 'H': return {.key = Key::Home};
             case 'F': return {.key = Key::End};
+            case 'Z': return {.key = Key::ShiftTab}; // CSI Z = BackTab
             default:  return {.key = Key::Unknown};
         }
     }
@@ -215,30 +223,49 @@ void Terminal::MoveCursorLeft(int count)
 {
     if (count <= 0)
         return;
-    char buf[32];
-    auto len = snprintf(buf, sizeof(buf), "\x1b[%dD", count);
-    write(STDOUT_FILENO, buf, static_cast<size_t>(len));
+    const std::string seq = std::format("\x1b[{}D", count);
+    write(STDOUT_FILENO, seq.data(), seq.size());
 }
 
 void Terminal::MoveCursorRight(int count)
 {
     if (count <= 0)
         return;
-    char buf[32];
-    auto len = snprintf(buf, sizeof(buf), "\x1b[%dC", count);
-    write(STDOUT_FILENO, buf, static_cast<size_t>(len));
+    const std::string seq = std::format("\x1b[{}C", count);
+    write(STDOUT_FILENO, seq.data(), seq.size());
 }
 
 void Terminal::MoveCursorToCol(int col)
 {
-    char buf[32];
-    auto len = snprintf(buf, sizeof(buf), "\x1b[%dG", col + 1);
-    write(STDOUT_FILENO, buf, static_cast<size_t>(len));
+    const std::string seq = std::format("\x1b[{}G", col + 1);
+    write(STDOUT_FILENO, seq.data(), seq.size());
 }
 
 void Terminal::ClearToEndOfLine()
 {
     write(STDOUT_FILENO, "\x1b[K", 3);
+}
+
+void Terminal::MoveCursorUp(int count)
+{
+    if (count <= 0)
+        return;
+    const std::string seq = std::format("\x1b[{}A", count);
+    write(STDOUT_FILENO, seq.data(), seq.size());
+}
+
+void Terminal::MoveCursorDown(int count)
+{
+    if (count <= 0)
+        return;
+    const std::string seq = std::format("\x1b[{}B", count);
+    write(STDOUT_FILENO, seq.data(), seq.size());
+}
+
+void Terminal::ClearBelow()
+{
+    // Erase from the cursor to the end of the screen (wipes the menu).
+    write(STDOUT_FILENO, "\x1b[0J", 4);
 }
 
 void Terminal::ClearScreen()
@@ -248,10 +275,18 @@ void Terminal::ClearScreen()
 
 int Terminal::GetWidth()
 {
-    struct winsize winsz;
+    struct winsize winsz{};
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &winsz) == 0 && winsz.ws_col > 0)
         return winsz.ws_col;
     return 80;
+}
+
+int Terminal::GetHeight()
+{
+    struct winsize winsz{};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &winsz) == 0 && winsz.ws_row > 0)
+        return winsz.ws_row;
+    return 24;
 }
 
 } // namespace line

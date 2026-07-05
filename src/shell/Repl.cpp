@@ -10,6 +10,7 @@
 #include "parser/ParserException.hpp"
 #include "parser/Tokenizer.hpp"
 #include "shell/JobTable.hpp"
+#include "shell/ShellCompleter.hpp"
 #include "shell/ShellState.hpp"
 #include "signals/Sigchld.hpp"
 #include "signals/SignalManager.hpp"
@@ -17,6 +18,7 @@
 #include <csignal>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <unistd.h>
@@ -48,7 +50,10 @@ namespace shell
 Repl::Repl()
     : m_state_(std::make_unique<ShellState>(LoadEnvironMap()))
     , m_dispatcher_(std::make_unique<builtins::BuiltinDispatcher>())
-    , m_history_(m_state_->GetVar("HOME").value_or("") + "/.shell_history")
+    , m_history_(m_state_->GetVar("HOME").value_or("") +
+                 "/.shell_history")
+    , m_completer_(
+          std::make_unique<ShellCompleter>(m_state_, m_dispatcher_))
 {
     m_cmdRunner_ = [this](const std::string& text) -> std::string
     {
@@ -60,8 +65,11 @@ Repl::Repl()
                                    m_dispatcher_,
                                    m_cmdRunner_);
     };
-    m_executor_ = std::make_unique<exec::Executor>(m_state_, m_dispatcher_, m_cmdRunner_);
-    m_editor_ = std::make_unique<line::LineEditor>(m_terminal_, m_history_);
+    m_executor_ = std::make_unique<exec::Executor>(m_state_,
+                                                   m_dispatcher_,
+                                                   m_cmdRunner_);
+    m_editor_ =
+        std::make_unique<line::LineEditor>(m_terminal_, m_history_, m_completer_);
     m_history_.Load();
 }
 
@@ -103,14 +111,16 @@ int Repl::Run()
         std::string line;
         if (m_interactive_)
         {
-            auto prompt = buffer.empty() ? BuildPrompt() : std::string("> ");
+            auto prompt =
+                buffer.empty() ? BuildPrompt() : std::string("> ");
             auto result = m_editor_->ReadLine(prompt);
             if (!result.has_value())
             {
                 if (!buffer.empty())
                 {
-                    io::fdops::WriteAll(STDOUT_FILENO,
-                                        "unexpected end of input\r\n");
+                    io::fdops::WriteAll(
+                        STDOUT_FILENO,
+                        "unexpected end of input\r\n");
                     buffer.clear();
                     continue;
                 }

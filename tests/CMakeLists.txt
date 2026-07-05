@@ -16,6 +16,8 @@ add_executable(shell_tests
     unit/shell/ShellStateTest.cpp
     unit/shell/ExpanderTest.cpp
     unit/shell/JobTableTest.cpp
+    unit/shell/ShellCompleterTest.cpp
+    unit/line/CompletionPagerTest.cpp
     unit/exec/CommandSpecTest.cpp
     unit/exec/ProcessExecutorTest.cpp
     unit/exec/WaitStatusTest.cpp

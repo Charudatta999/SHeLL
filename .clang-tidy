@@ -24,7 +24,8 @@ Checks: >
     -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
     -cppcoreguidelines-pro-bounds-pointer-arithmetic,
     -readability-implicit-bool-conversion,
-    -readability-braces-around-statements
+    -readability-braces-around-statements,
+    -readability-convert-member-functions-to-static
 
 WarningsAsErrors: ''
 

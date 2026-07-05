@@ -108,6 +108,7 @@ add_library(shell_core STATIC
     src/shell/JobTable.cpp
     src/shell/Repl.cpp
     src/shell/Prompt.cpp
+    src/shell/ShellCompleter.cpp
 
     # --- Parser ---
     src/parser/Token.cpp
@@ -131,6 +132,7 @@ add_library(shell_core STATIC
     src/line/Terminal.cpp
     src/line/History.cpp
     src/line/LineEditor.cpp
+    src/line/CompletionPager.cpp
 
     # --- Arithmetic ---
     src/arithmetic/ArithmeticEngine.cpp
