@@ -1,9 +1,8 @@
 {
-    "cmake.sourceDirectory": "/workspaces/SHeLL",
+    "cmake.sourceDirectory": "${workspaceFolder}",
     "dev.containers.dockerPath": "podman",
     "docker.dockerPath": "podman",
     "containers.containerCommand": "podman",
-    "cmake.ignoreCMakeListsMissing": true,
     "clangd.arguments": [
         "--compile-commands-dir=${workspaceFolder}/build",
         "--background-index",
