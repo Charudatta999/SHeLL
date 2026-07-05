@@ -27,6 +27,7 @@ public:
     void Visit(While& node) override;
     void Visit(For& node) override;
     void Visit(CStyleFor& node) override;
+    void Visit(Select& node) override;
     void Visit(If& node) override;
     void Visit(Case& node) override;
     void Visit(ArithmeticCommand& node) override;

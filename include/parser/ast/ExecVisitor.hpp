@@ -16,6 +16,7 @@ class Function;
 class While;
 class For;
 class CStyleFor;
+class Select;
 class If;
 class Case;
 class ArithmeticCommand;
@@ -40,6 +41,7 @@ public:
     virtual coro::Task Visit(While&) = 0;
     virtual coro::Task Visit(For&) = 0;
     virtual coro::Task Visit(CStyleFor&) = 0;
+    virtual coro::Task Visit(Select&) = 0;
     virtual coro::Task Visit(If&) = 0;
     virtual coro::Task Visit(Case&) = 0;
     virtual coro::Task Visit(ArithmeticCommand&) = 0;

@@ -155,6 +155,19 @@ void AstPrinter::Visit(CStyleFor& node)
     --m_depth_;
 }
 
+void AstPrinter::Visit(Select& node)
+{
+    Indent();
+    std::cout << "Select: " << node.GetVar() << " in";
+    for (const auto& w : node.GetWords())
+        std::cout << ' ' << w;
+    std::cout << "\n";
+    ++m_depth_;
+    if (node.GetBody())
+        node.GetBody()->Accept(*this);
+    --m_depth_;
+}
+
 void AstPrinter::Visit(If& node)
 {
     Indent();

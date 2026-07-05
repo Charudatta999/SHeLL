@@ -452,6 +452,101 @@ TEST(ParserTest, ZshForeach)
     ASSERT_EQ(fn->GetWords().size(), 3u);
 }
 
+// ─── C-style for loop ───────────────────────────────────────────────────────
+
+TEST(ParserTest, CStyleForFullHeader)
+{
+    auto node = parse("for ((i = 0; i < 5; i++)); do echo $i; done");
+    const auto* fn = as<CStyleFor>(node);
+    ASSERT_NE(fn, nullptr);
+    const auto* init = as<ArithmeticCommand>(fn->GetInit().get());
+    const auto* cond = as<ArithmeticCommand>(fn->GetCond().get());
+    const auto* update = as<ArithmeticCommand>(fn->GetUpdate().get());
+    ASSERT_NE(init, nullptr);
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(update, nullptr);
+    EXPECT_EQ(init->GetExpr(), "i = 0");
+    EXPECT_EQ(cond->GetExpr(), "i < 5");
+    EXPECT_EQ(update->GetExpr(), "i++");
+    EXPECT_NE(fn->GetBody().get(), nullptr);
+}
+
+TEST(ParserTest, CStyleForEmptyHeader)
+{
+    auto node      = parse("for ((;;)); do echo hi; done");
+    const auto* fn = as<CStyleFor>(node);
+    ASSERT_NE(fn, nullptr);
+    EXPECT_EQ(fn->GetInit().get(), nullptr);
+    EXPECT_EQ(fn->GetCond().get(), nullptr);
+    EXPECT_EQ(fn->GetUpdate().get(), nullptr);
+    EXPECT_NE(fn->GetBody().get(), nullptr);
+}
+
+TEST(ParserTest, CStyleForEmptyConditionOnly)
+{
+    auto node      = parse("for ((i = 0;; i++)); do echo hi; done");
+    const auto* fn = as<CStyleFor>(node);
+    ASSERT_NE(fn, nullptr);
+    EXPECT_NE(fn->GetInit().get(), nullptr);
+    EXPECT_EQ(fn->GetCond().get(), nullptr);
+    EXPECT_NE(fn->GetUpdate().get(), nullptr);
+}
+
+TEST(ParserTest, CStyleForNestedParensDoNotSplitSections)
+{
+    auto node = parse(
+        "for ((i = (1 + 2); i < (4 * 2); i = (i + 1))); do echo; done");
+    const auto* fn = as<CStyleFor>(node);
+    ASSERT_NE(fn, nullptr);
+    const auto* cond = as<ArithmeticCommand>(fn->GetCond().get());
+    ASSERT_NE(cond, nullptr);
+    EXPECT_EQ(cond->GetExpr(), "i < (4 * 2)");
+}
+
+TEST(ParserNeg, CStyleForTwoSectionsThrows)
+{
+    EXPECT_THROW(parse("for ((i = 0; i < 3)); do echo; done"),
+                 ParserException);
+}
+
+TEST(ParserNeg, CStyleForMissingDoThrows)
+{
+    EXPECT_THROW(parse("for ((;;)) echo; done"), ParserException);
+}
+
+// ─── Select loop ────────────────────────────────────────────────────────────
+
+TEST(ParserTest, SelectLoop)
+{
+    auto node      = parse("select x in a b c; do echo $x; done");
+    const auto* sn = as<Select>(node);
+    ASSERT_NE(sn, nullptr);
+    EXPECT_EQ(sn->GetVar(), "x");
+    ASSERT_EQ(sn->GetWords().size(), 3u);
+    EXPECT_EQ(sn->GetWords()[0], "a");
+    EXPECT_EQ(sn->GetWords()[2], "c");
+    EXPECT_NE(sn->GetBody().get(), nullptr);
+}
+
+TEST(ParserTest, SelectNoInClause)
+{
+    auto node      = parse("select x; do echo $x; done");
+    const auto* sn = as<Select>(node);
+    ASSERT_NE(sn, nullptr);
+    EXPECT_EQ(sn->GetVar(), "x");
+    EXPECT_TRUE(sn->GetWords().empty());
+}
+
+TEST(ParserNeg, SelectMissingVarThrows)
+{
+    EXPECT_THROW(parse("select; do echo; done"), ParserException);
+}
+
+TEST(ParserNeg, SelectMissingDoneThrows)
+{
+    EXPECT_THROW(parse("select x in a; do echo"), ParserException);
+}
+
 // ─── Case statement ─────────────────────────────────────────────────────────
 
 TEST(ParserTest, CaseBasic)

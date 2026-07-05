@@ -12,6 +12,7 @@
 #include "parser/ast/commands/Group.hpp"
 #include "parser/ast/commands/If.hpp"
 #include "parser/ast/commands/List.hpp"
+#include "parser/ast/commands/Select.hpp"
 #include "parser/ast/commands/SimpleCommand.hpp"
 #include "parser/ast/commands/Subshell.hpp"
 #include "parser/ast/commands/While.hpp"
