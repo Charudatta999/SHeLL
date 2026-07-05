@@ -5,7 +5,6 @@
 #include "utils/ErrorCodes.hpp"
 
 
-#include <asm-generic/errno.h>
 #include <cerrno>
 #include <cstdlib>
 #include <sys/types.h>

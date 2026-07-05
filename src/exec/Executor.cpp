@@ -4,6 +4,7 @@
 #include "arithmetic/ArithmeticException.hpp"
 #include "builtins/BuiltInFunction.hpp"
 #include "builtins/BuiltinDispatcher.hpp"
+#include "exec/ControlFlow.hpp"
 #include "exec/ExecException.hpp"
 #include "exec/ExecHelpers.hpp"
 #include "exec/ProcessExecutor.hpp"
@@ -60,6 +61,26 @@ struct CompoundScope
 
     CompoundScope(const CompoundScope&) = delete;
     CompoundScope& operator=(const CompoundScope&) = delete;
+};
+
+struct LoopScope
+{
+    int& depth;
+
+    explicit LoopScope(int& target) : depth(target)
+    {
+        ++depth;
+    }
+
+    ~LoopScope()
+    {
+        --depth;
+    }
+
+    LoopScope(const LoopScope&) = delete;
+    LoopScope& operator=(const LoopScope&) = delete;
+    LoopScope(LoopScope&&) = delete;
+    LoopScope& operator=(LoopScope&&) = delete;
 };
 
 struct SuspendAwaitable
@@ -172,7 +193,7 @@ int Executor::Run(const std::shared_ptr<parser::ast::AstNode>& root)
     }
     auto& promise = task.GetHandle().promise();
     if (auto excp = promise.Exception())
-        std::rethrow_exception(excp);
+        return SettleControlFlow(excp);
     return promise.Result();
 }
 
@@ -183,8 +204,44 @@ int Executor::RunToCompletion(
     task.GetHandle().resume();
     auto& promise = task.GetHandle().promise();
     if (auto excp = promise.Exception())
-        std::rethrow_exception(excp);
+        return SettleControlFlow(excp);
     return promise.Result();
+}
+
+bool Executor::ConsumeLoopControl(const LoopControl& control)
+{
+    if (control.level > 1 && m_loopDepth_ > 1)
+        throw LoopControl{.kind = control.kind,
+                          .level = control.level - 1};
+    m_status_ = 0;
+    return control.kind == LoopControl::Kind::Break;
+}
+
+int Executor::SettleControlFlow(const std::exception_ptr& excp) const
+{
+    try
+    {
+        std::rethrow_exception(excp);
+    }
+    catch (const LoopControl& control)
+    {
+        const std::string name =
+            (control.kind == LoopControl::Kind::Break) ? "break"
+                                                       : "continue";
+        io::fdops::WriteAll(
+            STDERR_FILENO,
+            name +
+                ": only meaningful in a `for', `while', or `until' "
+                "loop\n");
+        return 0;
+    }
+    catch (const FunctionReturn&)
+    {
+        io::fdops::WriteAll(STDERR_FILENO,
+                            "return: can only `return' from a "
+                            "function or sourced script\n");
+        return 1;
+    }
 }
 
 SuspendedCoro::ResumeResult
@@ -213,7 +270,9 @@ Executor::ResumeSuspended(SuspendedCoro& rec, int leafStatus)
     // throw).
     auto& promise = rec.rootTask.GetHandle().promise();
     if (auto excp = promise.Exception())
-        std::rethrow_exception(excp);
+        return {.completed = true,
+                .status = SettleControlFlow(excp),
+                .newPgid = -1};
     return {.completed = true,
             .status = promise.Result(),
             .newPgid = -1};
@@ -284,7 +343,14 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
     }
     if (auto* body = m_state_->GetFunctionBody(argv[0]))
     {
-        co_await body->Accept(*this);
+        try
+        {
+            co_await body->Accept(*this);
+        }
+        catch (const FunctionReturn& ret)
+        {
+            m_status_ = ret.status;
+        }
         co_return m_status_;
     }
     else if (m_builtins_->IsBuiltin(argv[0]))
@@ -578,19 +644,32 @@ coro::Task Executor::Visit(parser::ast::Group& group)
 coro::Task Executor::Visit(parser::ast::While& condi)
 {
     CompoundScope scope(m_inCompound_);
+    LoopScope loopScope(m_loopDepth_);
     while (true)
     {
-        co_await condi.GetCondition()->Accept(*this);
-        bool keepGoing = (m_status_ == 0);
-        if (condi.IsUntil())
+        bool exitLoop = false;
+        try
         {
-            keepGoing = !keepGoing;
+            co_await condi.GetCondition()->Accept(*this);
+            bool keepGoing = (m_status_ == 0);
+            if (condi.IsUntil())
+            {
+                keepGoing = !keepGoing;
+            }
+            if (!keepGoing)
+            {
+                break;
+            }
+            co_await condi.GetBody()->Accept(*this);
         }
-        if (!keepGoing)
+        catch (const LoopControl& control)
+        {
+            exitLoop = ConsumeLoopControl(control);
+        }
+        if (exitLoop)
         {
             break;
         }
-        co_await condi.GetBody()->Accept(*this);
     }
     co_return m_status_;
 }
@@ -598,11 +677,24 @@ coro::Task Executor::Visit(parser::ast::While& condi)
 coro::Task Executor::Visit(parser::ast::For& loop)
 {
     CompoundScope scope(m_inCompound_);
+    LoopScope loopScope(m_loopDepth_);
     const auto& words = loop.GetWords();
     for (const auto& word : words)
     {
         m_state_->SetVar(loop.GetVar(), word);
-        co_await loop.GetBody()->Accept(*this);
+        bool exitLoop = false;
+        try
+        {
+            co_await loop.GetBody()->Accept(*this);
+        }
+        catch (const LoopControl& control)
+        {
+            exitLoop = ConsumeLoopControl(control);
+        }
+        if (exitLoop)
+        {
+            break;
+        }
     }
     co_return m_status_;
 }
@@ -610,6 +702,7 @@ coro::Task Executor::Visit(parser::ast::For& loop)
 coro::Task Executor::Visit(parser::ast::CStyleFor& loop)
 {
     CompoundScope scope(m_inCompound_);
+    LoopScope loopScope(m_loopDepth_);
 
     if (loop.GetInit())
         co_await loop.GetInit()->Accept(*this);
@@ -623,8 +716,18 @@ coro::Task Executor::Visit(parser::ast::CStyleFor& loop)
                 break;
         }
 
-        if (loop.GetBody())
-            co_await loop.GetBody()->Accept(*this);
+        bool exitLoop = false;
+        try
+        {
+            if (loop.GetBody())
+                co_await loop.GetBody()->Accept(*this);
+        }
+        catch (const LoopControl& control)
+        {
+            exitLoop = ConsumeLoopControl(control);
+        }
+        if (exitLoop)
+            break;
 
         if (loop.GetUpdate())
             co_await loop.GetUpdate()->Accept(*this);

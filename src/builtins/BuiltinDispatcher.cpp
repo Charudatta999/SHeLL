@@ -20,6 +20,9 @@ BuiltinDispatcher::BuiltinDispatcher()
     m_table_["fg"]  = Fg;
     m_table_["bg"]  = Bg;
     m_table_["wait"]  = Wait;
+    m_table_["break"]  = Break;
+    m_table_["continue"]  = Continue;
+    m_table_["return"]  = Return;
 }
 
 bool BuiltinDispatcher::IsBuiltin(const std::string& name) const

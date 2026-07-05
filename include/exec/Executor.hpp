@@ -11,6 +11,7 @@
 
 #include <coroutine>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <string>
 #include <unistd.h>
@@ -38,6 +39,8 @@ class AstNode;
 
 namespace exec
 {
+
+struct LoopControl;
 
 enum class State : std::uint8_t
 {
@@ -85,6 +88,11 @@ private:
     int RunToCompletion(
         const std::unique_ptr<parser::ast::AstNode>& node);
 
+    bool ConsumeLoopControl(const LoopControl& control);
+
+    [[nodiscard]]
+    int SettleControlFlow(const std::exception_ptr& excp) const;
+
     // Thaw a frozen compound: feed the resumed leaf's real status in,
     // wake the suspended frame, and drive the rest to completion or
     // the next freeze. Called (via the captured callable) from fg;
@@ -112,6 +120,7 @@ private:
     int m_outFd_;
     bool m_inCompound_ = false;
     bool m_inForkedChild_ = false;
+    int m_loopDepth_ = 0;
     std::coroutine_handle<> m_suspendedHandle_;
     pid_t m_suspendedPgid_;
     int m_resumedStatus_;
