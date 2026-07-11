@@ -336,7 +336,8 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
                 assignment.first,
                 shell::expander::Expand(assignment.second,
                                         m_state_,
-                                        m_cmdRunner_)
+                                        m_cmdRunner_,
+                                        true)
                     .front());
         m_status_ = 0;
         co_return m_status_;

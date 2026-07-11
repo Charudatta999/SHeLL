@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include <pwd.h>
 #include <unistd.h>
 
 #include "arithmetic/ArithmeticException.hpp"
@@ -420,4 +421,118 @@ TEST(BraceExpand, PassthroughFollowedByValidGroup)
 TEST(BraceExpand, SingleAlternativeNoComma)
 {
     EXPECT_EQ(brace("{a}"), (Words{"{a}"}));
+}
+
+// ─── tilde expansion ─────────────────────────────────────────────────────────
+TEST(Tilde, AloneExpandsHome)
+{
+    auto s = makeState({{"HOME", "/root"}});
+    EXPECT_EQ(expand1("~", s), "/root");
+}
+
+TEST(Tilde, LeadingPathExpands)
+{
+    auto s = makeState({{"HOME", "/root"}});
+    EXPECT_EQ(expand1("~/bin", s), "/root/bin");
+}
+
+TEST(Tilde, MidWordIsLiteral)
+{
+    auto s = makeState({{"HOME", "/root"}});
+    EXPECT_EQ(expand1("a~b", s), "a~b");
+}
+
+TEST(Tilde, TrailingTildeIsLiteral)
+{
+    auto s = makeState({{"HOME", "/root"}});
+    EXPECT_EQ(expand1("x~", s), "x~");
+}
+
+TEST(Tilde, HomeUnsetFallsBackToPasswd)
+{
+    auto s = makeState();
+    const passwd* pw = ::getpwuid(::getuid());
+    ASSERT_NE(pw, nullptr);
+    EXPECT_EQ(expand1("~", s), pw->pw_dir);
+}
+
+TEST(Tilde, NamedUserExpandsViaGetpwnam)
+{
+    auto s = makeState();
+    const passwd* pw = ::getpwuid(::getuid());
+    ASSERT_NE(pw, nullptr);
+    EXPECT_EQ(expand1("~" + std::string(pw->pw_name), s),
+              pw->pw_dir);
+}
+
+TEST(Tilde, UnknownUserStaysLiteral)
+{
+    auto s = makeState({{"HOME", "/root"}});
+    EXPECT_EQ(expand1("~no_such_user_xyz/f", s),
+              "~no_such_user_xyz/f");
+}
+
+TEST(Tilde, PlusExpandsPwd)
+{
+    auto s = makeState({{"PWD", "/somewhere"}});
+    EXPECT_EQ(expand1("~+/x", s), "/somewhere/x");
+}
+
+TEST(Tilde, PlusWithoutPwdVarUsesShellCwd)
+{
+    auto s = makeState();
+    EXPECT_EQ(expand1("~+", s), s->GetCWD());
+}
+
+TEST(Tilde, MinusExpandsOldpwd)
+{
+    auto s = makeState({{"OLDPWD", "/prev"}});
+    EXPECT_EQ(expand1("~-", s), "/prev");
+}
+
+TEST(Tilde, MinusWithoutOldpwdStaysLiteral)
+{
+    auto s = makeState();
+    EXPECT_EQ(expand1("~-", s), "~-");
+}
+
+TEST(Tilde, ColonNotSpecialInNormalWord)
+{
+    auto s = makeState({{"HOME", "/root"}});
+    EXPECT_EQ(expand1("a:~/b", s), "a:~/b");
+}
+
+TEST(Tilde, AssignmentExpandsAfterColons)
+{
+    auto s = makeState({{"HOME", "/root"}});
+    auto pieces = shell::expander::Expand("~/bin:~/sbin:/usr/bin",
+                                          s,
+                                          stubRunner,
+                                          true);
+    ASSERT_EQ(pieces.size(), 1u);
+    EXPECT_EQ(pieces.front(), "/root/bin:/root/sbin:/usr/bin");
+}
+
+TEST(Tilde, AssignmentUnknownUserSegmentStaysLiteral)
+{
+    auto s = makeState({{"HOME", "/root"}});
+    auto pieces = shell::expander::Expand("~/bin:~no_such_user_xyz",
+                                          s,
+                                          stubRunner,
+                                          true);
+    ASSERT_EQ(pieces.size(), 1u);
+    EXPECT_EQ(pieces.front(), "/root/bin:~no_such_user_xyz");
+}
+
+TEST(Tilde, ResultIsNotRescanned)
+{
+    auto s = makeState({{"HOME", "/ro$x"}, {"x", "boom"}});
+    EXPECT_EQ(expand1("~", s), "/ro$x"); // bash: tilde result is verbatim
+}
+
+TEST(Tilde, DollarAfterFailedTildeStillExpands)
+{
+    auto s = makeState({{"USER", "cj"}});
+    // bash: no user literally named "$USER" -> tilde stays, $USER expands
+    EXPECT_EQ(expand1("~$USER", s), "~cj");
 }
