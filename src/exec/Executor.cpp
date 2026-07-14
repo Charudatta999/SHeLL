@@ -25,6 +25,7 @@
 #include "parser/ast/commands/If.hpp"
 #include "parser/ast/commands/List.hpp"
 #include "parser/ast/commands/Pipeline.hpp"
+#include "parser/ast/commands/Select.hpp"
 #include "parser/ast/commands/SimpleCommand.hpp"
 #include "parser/ast/commands/Subshell.hpp"
 #include "parser/ast/commands/While.hpp"
@@ -82,6 +83,53 @@ struct LoopScope
     LoopScope(LoopScope&&) = delete;
     LoopScope& operator=(LoopScope&&) = delete;
 };
+
+// Reads one line from stdin for `select`. Returns false on EOF or
+// error, which terminates the loop like bash; a partial line at EOF
+// is discarded (bash's read fails there too).
+bool ReadSelectReply(std::string& out)
+{
+    out.clear();
+    while (true)
+    {
+        char ch = 0;
+        const auto res = io::fdops::ReadByte(STDIN_FILENO, ch);
+        if (res == io::fdops::ReadResult::Interrupted)
+            continue;
+        if (res != io::fdops::ReadResult::Ok)
+            return false;
+        if (ch == '\n')
+            return true;
+        out.push_back(ch);
+    }
+}
+
+std::string TrimBlanks(const std::string& text)
+{
+    const auto first = text.find_first_not_of(" \t");
+    if (first == std::string::npos)
+        return "";
+    const auto last = text.find_last_not_of(" \t");
+    return text.substr(first, last - first + 1);
+}
+
+// 1-based menu index from the reply, or 0 for anything that is not a
+// number in [1, count].
+std::size_t SelectIndex(const std::string& reply, std::size_t count)
+{
+    if (reply.empty())
+        return 0;
+    std::size_t value = 0;
+    for (const char ch : reply)
+    {
+        if (ch < '0' || ch > '9')
+            return 0;
+        value = (value * 10) + static_cast<std::size_t>(ch - '0');
+        if (value > count)
+            return 0;
+    }
+    return value;
+}
 
 struct SuspendAwaitable
 {
@@ -732,6 +780,68 @@ coro::Task Executor::Visit(parser::ast::CStyleFor& loop)
 
         if (loop.GetUpdate())
             co_await loop.GetUpdate()->Accept(*this);
+    }
+    co_return m_status_;
+}
+
+coro::Task Executor::Visit(parser::ast::Select& loop)
+{
+    CompoundScope scope(m_inCompound_);
+    LoopScope loopScope(m_loopDepth_);
+
+    // The menu is expanded once, up front, like bash.
+    const auto items = ExpandArgv(loop.GetWords());
+    m_status_ = 0;
+    if (items.empty())
+        co_return m_status_;
+
+    bool showMenu = true;
+    while (true)
+    {
+        if (showMenu)
+        {
+            std::string menu;
+            for (std::size_t i = 0; i < items.size(); ++i)
+            {
+                menu += std::to_string(i + 1) + ") " + items[i] +
+                        "\n";
+            }
+            io::fdops::WriteAll(STDERR_FILENO, menu);
+            showMenu = false;
+        }
+        io::fdops::WriteAll(
+            STDERR_FILENO,
+            m_state_->GetVar("PS3").value_or("#? "));
+
+        std::string reply;
+        if (!ReadSelectReply(reply))
+        {
+            break; // EOF ends the loop.
+        }
+        reply = TrimBlanks(reply);
+        if (reply.empty())
+        {
+            showMenu = true; // Bare Enter redisplays the menu.
+            continue;
+        }
+        m_state_->SetVar("REPLY", reply);
+        const std::size_t idx = SelectIndex(reply, items.size());
+        m_state_->SetVar(loop.GetVar(),
+                         (idx != 0) ? items[idx - 1] : "");
+
+        bool exitLoop = false;
+        try
+        {
+            co_await loop.GetBody()->Accept(*this);
+        }
+        catch (const LoopControl& control)
+        {
+            exitLoop = ConsumeLoopControl(control);
+        }
+        if (exitLoop)
+        {
+            break;
+        }
     }
     co_return m_status_;
 }

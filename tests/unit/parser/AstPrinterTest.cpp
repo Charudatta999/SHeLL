@@ -79,6 +79,18 @@ TEST(AstPrinter, For)
     EXPECT_TRUE(contains(out, "For"));
 }
 
+TEST(AstPrinter, CStyleFor)
+{
+    auto out = dump("for ((i = 0; i < 3; i++)); do echo $i; done");
+    EXPECT_TRUE(contains(out, "C-style For"));
+}
+
+TEST(AstPrinter, Select)
+{
+    auto out = dump("select x in a b; do echo $x; done");
+    EXPECT_TRUE(contains(out, "Select"));
+}
+
 TEST(AstPrinter, Case)
 {
     auto out = dump("case $x in a) echo A;; esac");

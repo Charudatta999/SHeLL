@@ -582,6 +582,30 @@ std::unique_ptr<ast::AstNode> Parser::ParseFor()
                                       std::move(body));
 }
 
+std::unique_ptr<ast::AstNode> Parser::ParseSelect()
+{
+    Expect(TokenType::Select, "Parsing 'select' loop");
+    std::string var =
+        Expect(TokenType::Word, "Invalid syntax for 'select' loop")
+            .value;
+    std::vector<std::string> words;
+    if (Match(TokenType::In))
+    {
+        while (Check(TokenType::Word))
+        {
+            words.push_back(Advance().value);
+        }
+    }
+    (void)Match(TokenType::Semi);
+    SkipNewlines();
+    Expect(TokenType::Do, "Invalid syntax for 'select' loop");
+    auto body = ExpectList("in select body");
+    Expect(TokenType::Done, "Invalid syntax for 'select' loop");
+    return std::make_unique<ast::Select>(std::move(var),
+                                         std::move(words),
+                                         std::move(body));
+}
+
 std::unique_ptr<ast::AstNode> Parser::ParseCStyleFor()
 {
     const std::string expr = Advance().value;
@@ -718,6 +742,8 @@ std::unique_ptr<ast::AstNode> Parser::ParseCommand()
         case TokenType::For:
         case TokenType::Foreach:
             return ParseFor();
+        case TokenType::Select:
+            return ParseSelect();
         case TokenType::Case:
             return ParseCase();
         case TokenType::Word:
