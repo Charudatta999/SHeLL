@@ -16,6 +16,8 @@
 #include <glob.h>
 #include <memory>
 #include <optional>
+#include <pwd.h>
+#include <unistd.h>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -86,6 +88,30 @@ std::string ReadWord(const std::string& word, std::size_t& pos)
     }
     pos = index;
     return out;
+}
+
+std::optional<std::string> ResolveTilde(const std::string& name,
+             std::unique_ptr<ShellState>& state)
+{
+    if (name.empty())
+    {
+        if (auto home = state->GetVar("HOME"))
+            return home;
+        if (const passwd* pw = ::getpwuid(::getuid()))
+            return std::string(pw->pw_dir);
+        return std::nullopt;
+    }
+    if (name == "+")
+    {
+        if (auto pwd = state->GetVar("PWD"))
+            return pwd;
+        return state->GetCWD();
+    }
+    if (name == "-")
+        return state->GetVar("OLDPWD");
+    if (const passwd* pw = ::getpwnam(name.c_str()))
+        return std::string(pw->pw_dir);
+    return std::nullopt;
 }
 
 std::string ReadCommandBody(const std::string& word, std::size_t& pos)
@@ -292,7 +318,7 @@ std::pair<int, int> FindFirstGroup(const std::string& word)
 } // namespace
 
 std::vector<std::string> Expand(const std::string& word,
-                                std::unique_ptr<ShellState>& state,  const CommandRunner& cmdRunner)
+                                std::unique_ptr<ShellState>& state,  const CommandRunner& cmdRunner, bool assignment)
 {
     std::string out;
     ShellArithmeticVars adapter(state);
@@ -300,6 +326,28 @@ std::vector<std::string> Expand(const std::string& word,
     std::size_t pos = 0;
     while (pos < word.size())
     {
+        // Tilde: only at word start, or after a literal ':' when the
+        // word is an assignment value. The resolved directory goes
+        // straight into `out` so it is not re-scanned for $-expansions
+        if (word[pos] == '~' &&
+            (pos == 0 || (assignment && word[pos - 1] == ':')))
+        {
+            std::size_t end = pos + 1;
+            while (end < word.size() && word[end] != '/' &&
+                   !(assignment && word[end] == ':'))
+                ++end;
+            auto dir = ResolveTilde(word.substr(pos + 1, end - pos - 1),
+                                    state);
+            if (dir)
+            {
+                out += *dir;
+                pos = end;
+                continue;
+            }
+            // Unresolved (~nosuchuser, ~- with OLDPWD unset): fall
+            // through so the '~' is copied literally below.
+        }
+
         // detect "$(("
         if (word[pos] == '$' && pos + 2 < word.size() &&
             word[pos + 1] == '(' && word[pos + 2] == '(')

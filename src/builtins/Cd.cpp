@@ -27,6 +27,8 @@ int Cd(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ct
         target = argv[1];
     }
 
+    const std::string oldPwd = ctx->m_state_->GetCWD();
+
     if (chdir(target.c_str()) != 0)
     {
         errStr = "cd: " + target + "\n";
@@ -36,7 +38,11 @@ int Cd(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ct
 
     char buf[PATH_MAX];
     if (getcwd(buf, sizeof(buf)))
+    {
         ctx->m_state_->SetCWD(buf);
+        ctx->m_state_->SetVar("OLDPWD", oldPwd);
+        ctx->m_state_->SetVar("PWD", buf);
+    }
     return 0;
 }
 } // namespace builtins

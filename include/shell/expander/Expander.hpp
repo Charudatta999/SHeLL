@@ -13,7 +13,7 @@ namespace expander
 {
 using CommandRunner = std::function<std::string(const std::string&)>;
 std::vector<std::string> Expand(const std::string& word,
-                                std::unique_ptr<ShellState>& state,  const CommandRunner& cmdRunner);
+                                std::unique_ptr<ShellState>& state,  const CommandRunner& cmdRunner,bool assignment = false);
 
 // Purely textual, stateless brace expansion. Runs before every other
 // expansion. One word in, >= 1 word out (a word with no valid brace
