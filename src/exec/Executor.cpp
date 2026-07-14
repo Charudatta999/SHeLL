@@ -330,9 +330,23 @@ CommandSpec
 Executor::BuildSpec(const std::vector<std::string>& argv,
                     const parser::ast::SimpleCommand& command) const
 {
-    return CommandSpec(argv,
-                       command.Redirects(),
-                       command.Assignments());
+    auto spec = CommandSpec(argv,
+                            command.Redirects(),
+                            command.Assignments());
+    // Child env = exported set, with FOO=bar prefix assignments
+    // layered on top for just this command.
+    auto env = m_state_->GetEnv();
+    for (const auto& assignment : command.Assignments())
+        env[assignment.first] =
+            shell::expander::Expand(assignment.second,
+                                    m_state_,
+                                    m_cmdRunner_,
+                                    true)
+                .front();
+    spec.env.reserve(env.size());
+    for (const auto& entry : env)
+        spec.env.push_back(entry.first + "=" + entry.second);
+    return spec;
 }
 
 void Executor::RecordStoppedJob(exec::State state,
@@ -379,15 +393,23 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
 
     if (argv.empty())
     {
+        m_status_ = 0;
         for (const auto& assignment : command.Assignments())
-            m_state_->SetVar(
-                assignment.first,
+        {
+            auto value =
                 shell::expander::Expand(assignment.second,
                                         m_state_,
                                         m_cmdRunner_,
                                         true)
-                    .front());
-        m_status_ = 0;
+                    .front();
+            if (!m_state_->SetVar(assignment.first, value))
+            {
+                io::fdops::WriteAll(STDERR_FILENO,
+                                    assignment.first +
+                                        ": readonly variable\n");
+                m_status_ = 1;
+            }
+        }
         co_return m_status_;
     }
     if (auto* body = m_state_->GetFunctionBody(argv[0]))

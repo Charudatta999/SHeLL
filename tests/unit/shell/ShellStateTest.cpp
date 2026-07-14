@@ -254,3 +254,66 @@ TEST(ShellState, PidIsPositive)
     auto s = make();
     EXPECT_GT(s.GetShellPid(), 0);
 }
+
+// ─── Readonly ────────────────────────────────────────────────────────────────
+
+TEST(ShellState, ReadonlyBlocksSetVar)
+{
+    auto s = make();
+    s.SetVar("X", "1");
+    s.MarkReadonly("X");
+    EXPECT_FALSE(s.SetVar("X", "2"));
+    EXPECT_EQ(*s.GetVar("X"), "1");
+}
+
+TEST(ShellState, ReadonlyBlocksUnset)
+{
+    auto s = make();
+    s.SetVar("X", "1");
+    s.MarkReadonly("X");
+    EXPECT_FALSE(s.UnSetVar("X"));
+    EXPECT_TRUE(s.GetVar("X").has_value());
+}
+
+TEST(ShellState, SetVarSucceedsWhenNotReadonly)
+{
+    auto s = make();
+    EXPECT_TRUE(s.SetVar("X", "1"));
+    EXPECT_TRUE(s.UnSetVar("X"));
+}
+
+TEST(ShellState, IsReadonlyReflectsMark)
+{
+    auto s = make();
+    EXPECT_FALSE(s.IsReadonly("X"));
+    s.MarkReadonly("X");
+    EXPECT_TRUE(s.IsReadonly("X"));
+    EXPECT_EQ(s.GetReadonlyVars().count("X"), 1u);
+}
+
+// ─── Constructor exports inherited vars ──────────────────────────────────────
+
+TEST(ShellState, InheritedVarsAreExported)
+{
+    std::map<std::string, std::string> globals{{"PATH", "/bin"}};
+    ShellState s(globals);
+    EXPECT_TRUE(s.IsExported("PATH"));
+    EXPECT_EQ(s.GetEnv().at("PATH"), "/bin");
+}
+
+// ─── Positional parameters ───────────────────────────────────────────────────
+
+TEST(ShellState, PositionalParamsEmptyByDefault)
+{
+    auto s = make();
+    EXPECT_TRUE(s.GetPositionalParams().empty());
+}
+
+TEST(ShellState, SetPositionalParamsReplaces)
+{
+    auto s = make();
+    s.SetPositionalParams({"a", "b"});
+    s.SetPositionalParams({"c"});
+    ASSERT_EQ(s.GetPositionalParams().size(), 1u);
+    EXPECT_EQ(s.GetPositionalParams()[0], "c");
+}

@@ -3,7 +3,10 @@
 
 #include "shell/ShellState.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace builtins
@@ -20,6 +23,21 @@ struct BuiltinContext
     {
     }
 };
+
+/// @brief Test whether a name is a valid shell identifier:
+///        [A-Za-z_][A-Za-z0-9_]*.
+inline bool IsValidVarName(const std::string& name)
+{
+    if (name.empty())
+        return false;
+    auto first = static_cast<unsigned char>(name[0]);
+    if (!std::isalpha(first) && first != '_')
+        return false;
+    return std::all_of(name.begin() + 1,
+                       name.end(),
+                       [](unsigned char chr)
+                       { return std::isalnum(chr) || chr == '_'; });
+}
 
 int Cd(const std::vector<std::string>& argv,
        std::unique_ptr<BuiltinContext>& ctx);
@@ -52,5 +70,17 @@ int Continue(const std::vector<std::string>& argv,
 
 int Return(const std::vector<std::string>& argv,
            std::unique_ptr<BuiltinContext>& ctx);
+
+int Export(const std::vector<std::string>& argv,
+           std::unique_ptr<BuiltinContext>& ctx);
+
+int Unset(const std::vector<std::string>& argv,
+          std::unique_ptr<BuiltinContext>& ctx);
+
+int Set(const std::vector<std::string>& argv,
+        std::unique_ptr<BuiltinContext>& ctx);
+
+int Readonly(const std::vector<std::string>& argv,
+             std::unique_ptr<BuiltinContext>& ctx);
 } // namespace builtins
 #endif // BUILTIN_BUILTIN_FUNCTION_HPP

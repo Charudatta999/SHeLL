@@ -27,6 +27,7 @@ add_executable(shell_tests
     unit/exec/CStyleForTest.cpp
     unit/exec/SelectTest.cpp
     unit/exec/ArithmeticCommandTest.cpp
+    unit/exec/VariableBuiltinsTest.cpp
     unit/arithmetic/ArithmeticEngineTest.cpp
 )
 

@@ -367,8 +367,23 @@ std::vector<std::string> Expand(const std::string& word,
         {
             pos += 2;
             auto key = ReadWord(word, pos);
-            auto value = state->GetVar(key);
-            out += value.value_or("");
+            if (!key.empty() &&
+                std::all_of(key.begin(),
+                            key.end(),
+                            [](unsigned char chr)
+                            { return std::isdigit(chr); }))
+            {
+                // ${N}: positional parameter, 1-based.
+                const auto& params = state->GetPositionalParams();
+                std::size_t idx = std::stoul(key);
+                if (idx >= 1 && idx <= params.size())
+                    out += params[idx - 1];
+            }
+            else
+            {
+                auto value = state->GetVar(key);
+                out += value.value_or("");
+            }
             if (pos < word.size() && word[pos] == '}')
                 ++pos;
             else
@@ -404,6 +419,37 @@ std::vector<std::string> Expand(const std::string& word,
         {
             pos += 2;
             out += std::to_string(state->GetShellPid());
+        }
+        else if (word[pos] == '$' && pos + 1 < word.size() &&
+                 std::isdigit(word[pos + 1]))
+        {
+            // $1..$9: single digit only, bash semantics ($10 is
+            // ${1}0). $0 falls in range and expands empty (the
+            // shell name is not tracked yet).
+            const auto& params = state->GetPositionalParams();
+            auto idx =
+                static_cast<std::size_t>(word[pos + 1] - '0');
+            if (idx >= 1 && idx <= params.size())
+                out += params[idx - 1];
+            pos += 2;
+        }
+        else if (word[pos] == '$' && pos + 1 < word.size() &&
+                 word[pos + 1] == '#')
+        {
+            out += std::to_string(state->GetPositionalParams().size());
+            pos += 2;
+        }
+        else if (word[pos] == '$' && pos + 1 < word.size() &&
+                 (word[pos + 1] == '@' || word[pos + 1] == '*'))
+        {
+            const auto& params = state->GetPositionalParams();
+            for (std::size_t i = 0; i < params.size(); ++i)
+            {
+                if (i)
+                    out += ' ';
+                out += params[i];
+            }
+            pos += 2;
         }
         else
         {
