@@ -8,6 +8,7 @@
 #include <string>
 #include <sys/types.h>
 #include <termios.h>
+#include <vector>
 
 namespace parser::ast
 {
@@ -79,12 +80,14 @@ public:
     /// @brief Set (or overwrite) a variable's value.
     /// @param name Name of the variable.
     /// @param value Value to assign; defaults to empty.
-    void SetVar(const std::string& name,
+    /// @return false if the variable is readonly (value unchanged).
+    bool SetVar(const std::string& name,
                 const std::string& value = "") noexcept;
 
     /// @brief Remove a variable if it exists.
     /// @param varName Name of the variable to unset.
-    void UnSetVar(const std::string& varName) noexcept;
+    /// @return false if the variable is readonly (not removed).
+    bool UnSetVar(const std::string& varName) noexcept;
 
     /// @brief Test whether a variable is marked for export.
     /// @param varName Name of the variable.
@@ -96,10 +99,44 @@ public:
     /// @param varName Name of the variable to export.
     void ExportVar(const std::string& varName) noexcept;
 
+    /// @brief Get the set of names marked for export.
+    /// @return The exported-name set (names may have no value yet).
+    [[nodiscard]]
+    const std::set<std::string>& GetExportedNames() const;
+
     /// @brief Build the environment passed to child processes.
     /// @return A name to value map of only the exported variables.
     [[nodiscard]]
     std::map<std::string, std::string> GetEnv() const;
+
+    // Readonly variables
+
+    /// @brief Mark a variable immutable; SetVar/UnSetVar then
+    ///        refuse it.
+    /// @param varName Name of the variable to protect.
+    void MarkReadonly(const std::string& varName) noexcept;
+
+    /// @brief Test whether a variable is readonly.
+    /// @param varName Name of the variable.
+    /// @return true if the variable is in the readonly set.
+    [[nodiscard]]
+    bool IsReadonly(const std::string& varName) const;
+
+    /// @brief Get the set of readonly variable names.
+    /// @return The readonly-name set.
+    [[nodiscard]]
+    const std::set<std::string>& GetReadonlyVars() const;
+
+    // Positional parameters ($1.., set by `set -- args`)
+
+    /// @brief Replace all positional parameters atomically.
+    /// @param params The new parameter list; $1 is params[0].
+    void SetPositionalParams(std::vector<std::string> params);
+
+    /// @brief Get the current positional parameters.
+    /// @return The parameter list; $1 is index 0.
+    [[nodiscard]]
+    const std::vector<std::string>& GetPositionalParams() const;
 
     // Exit codes
 
@@ -213,6 +250,8 @@ private:
     std::string m_cwd_;
     std::map<std::string, std::string> m_vars_;
     std::set<std::string> m_exportedVars_;
+    std::set<std::string> m_readonlyVars_;
+    std::vector<std::string> m_positionalParams_;
     int m_lastCommandExitCode_;
     bool m_runningFlag_;
     std::map<std::string, bool> m_shellOptions_;

@@ -23,6 +23,10 @@ BuiltinDispatcher::BuiltinDispatcher()
     m_table_["break"]  = Break;
     m_table_["continue"]  = Continue;
     m_table_["return"]  = Return;
+    m_table_["export"]  = Export;
+    m_table_["unset"]  = Unset;
+    m_table_["set"]  = Set;
+    m_table_["readonly"]  = Readonly;
 }
 
 bool BuiltinDispatcher::IsBuiltin(const std::string& name) const

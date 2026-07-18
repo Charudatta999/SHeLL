@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <vector>
 
+extern char** environ;
+
 namespace exec
 {
 ProcessExecutor::ProcessExecutor()
@@ -75,6 +77,19 @@ void ProcessExecutor::Exec(const CommandSpec& spec)
     for (const auto& arg : spec.argv)
         argv.push_back(const_cast<char*>(arg.c_str()));
     argv.push_back(nullptr);
+
+    // Replace the inherited environ with the shell's exported set so
+    // `export` is honored. execvp (not execve) keeps PATH lookup and
+    // reads the environ global. Safe: we are post-fork, pre-exec.
+    std::vector<char*> envp;
+    if (!spec.env.empty())
+    {
+        envp.reserve(spec.env.size() + 1);
+        for (const auto& entry : spec.env)
+            envp.push_back(const_cast<char*>(entry.c_str()));
+        envp.push_back(nullptr);
+        environ = envp.data();
+    }
     execvp(spec.argv[0].c_str(), argv.data());
     if(errno == ENOENT)
     {

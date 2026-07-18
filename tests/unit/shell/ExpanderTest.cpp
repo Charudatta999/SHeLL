@@ -129,10 +129,11 @@ TEST(Expander, DollarVarStopsAtNonNameChar)
     EXPECT_EQ(expand1("$x.txt", s), "5.txt"); // '.' ends the name
 }
 
-TEST(Expander, DollarDigitIsLiteral)
+TEST(Expander, DollarDigitSingleDigitOnly)
 {
     auto s = makeState();
-    EXPECT_EQ(expand1("$1", s), "$1"); // positional params not supported -> literal
+    s->SetPositionalParams({"one"});
+    EXPECT_EQ(expand1("$10", s), "one0"); // bash: $10 means ${1}0
 }
 
 // ─── ${VAR} braced parameter expansion ───────────────────────────────────────
@@ -535,4 +536,37 @@ TEST(Tilde, DollarAfterFailedTildeStillExpands)
     auto s = makeState({{"USER", "cj"}});
     // bash: no user literally named "$USER" -> tilde stays, $USER expands
     EXPECT_EQ(expand1("~$USER", s), "~cj");
+}
+
+// ─── Positional parameters ───────────────────────────────────────────────────
+
+TEST(Expander, PositionalParamExpands)
+{
+    auto s = makeState();
+    s->SetPositionalParams({"one", "two"});
+    EXPECT_EQ(expand1("$1", s), "one");
+    EXPECT_EQ(expand1("$2", s), "two");
+    EXPECT_EQ(expand1("${1}", s), "one");
+}
+
+TEST(Expander, UnsetPositionalIsEmpty)
+{
+    auto s = makeState();
+    EXPECT_EQ(expand1("a$1b", s), "ab");
+}
+
+TEST(Expander, PositionalCountAndAll)
+{
+    auto s = makeState();
+    s->SetPositionalParams({"x", "y", "z"});
+    EXPECT_EQ(expand1("$#", s), "3");
+    EXPECT_EQ(expand1("$@", s), "x y z");
+    EXPECT_EQ(expand1("$*", s), "x y z");
+}
+
+TEST(Expander, EmptyPositionalsCountZero)
+{
+    auto s = makeState();
+    EXPECT_EQ(expand1("$#", s), "0");
+    EXPECT_EQ(expand1("$@", s), "");
 }

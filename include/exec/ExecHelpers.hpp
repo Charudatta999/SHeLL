@@ -14,6 +14,9 @@ struct CommandSpec
     std::vector<std::string> argv;
     std::vector<parser::ast::Redirect> redirects;
     std::vector<std::pair<std::string, std::string>> envOverrides;
+    // Full child environment as "NAME=value" entries, built from the
+    // shell's exported set. Empty means "inherit the shell's environ".
+    std::vector<std::string> env;
 
     CommandSpec(const std::vector<std::string>& argsArr)
         : argv{argsArr}

@@ -149,6 +149,10 @@ add_library(shell_core STATIC
     src/builtins/Break.cpp
     src/builtins/Continue.cpp
     src/builtins/Return.cpp
+    src/builtins/Export.cpp
+    src/builtins/Unset.cpp
+    src/builtins/Set.cpp
+    src/builtins/Readonly.cpp
 
     # --- Coroutines ---
     src/coro/Task.cpp

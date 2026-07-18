@@ -34,6 +34,10 @@ ShellState::ShellState(
     ,m_savedTermios_{ }
     ,m_hasSavedTermios_(false)
 {
+    // Variables inherited from the process environment are exported,
+    // matching bash: they came from environ and flow back to children.
+    for (const auto& itr : globalVars)
+        m_exportedVars_.insert(itr.first);
 }
 
 ShellState::~ShellState() = default;
@@ -86,24 +90,30 @@ std::map<std::string, std::string> ShellState::GetLocalVars() const
     return localVars;
 }
 
-void ShellState::SetVar(const std::string& name,
+bool ShellState::SetVar(const std::string& name,
                         const std::string& value) noexcept
 {
+    if (m_readonlyVars_.count(name))
+        return false;
     try
     {
         m_vars_[name] = value;
+        return true;
     }
     catch (const std::bad_alloc&)
     {
         // todo log when logger is intergrated
+        return false;
     }
 }
 
-void ShellState::UnSetVar(const std::string& varName) noexcept
+bool ShellState::UnSetVar(const std::string& varName) noexcept
 {
-
+    if (m_readonlyVars_.count(varName))
+        return false;
     m_exportedVars_.erase(varName);
     m_vars_.erase(varName);
+    return true;
 }
 
 bool ShellState::IsExported(const std::string& varName) const
@@ -123,6 +133,11 @@ void ShellState::ExportVar(const std::string& varName) noexcept
     }
 }
 
+const std::set<std::string>& ShellState::GetExportedNames() const
+{
+    return m_exportedVars_;
+}
+
 std::map<std::string, std::string> ShellState::GetEnv() const
 {
     std::map<std::string, std::string> envVars;
@@ -134,6 +149,45 @@ std::map<std::string, std::string> ShellState::GetEnv() const
         }
     }
     return envVars;
+}
+
+// ── Readonly variables
+// ───────────────────────────────────────────────────
+
+void ShellState::MarkReadonly(const std::string& varName) noexcept
+{
+    try
+    {
+        m_readonlyVars_.insert(varName);
+    }
+    catch (const std::bad_alloc&)
+    {
+        // todo log when logger is intergrated
+    }
+}
+
+bool ShellState::IsReadonly(const std::string& varName) const
+{
+    return m_readonlyVars_.count(varName);
+}
+
+const std::set<std::string>& ShellState::GetReadonlyVars() const
+{
+    return m_readonlyVars_;
+}
+
+// ── Positional parameters
+// ────────────────────────────────────────────────
+
+void ShellState::SetPositionalParams(std::vector<std::string> params)
+{
+    m_positionalParams_ = std::move(params);
+}
+
+const std::vector<std::string>&
+ShellState::GetPositionalParams() const
+{
+    return m_positionalParams_;
 }
 
 // ── Exit codes
