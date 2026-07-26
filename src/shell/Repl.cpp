@@ -5,6 +5,7 @@
 #include "exec/CaptureOutput.hpp"
 #include "exec/ExecException.hpp"
 #include "exec/Executor.hpp"
+#include "exec/ProcessSubstitution.hpp"
 #include "io/FdOps.hpp"
 #include "parser/Parser.hpp"
 #include "parser/ParserException.hpp"
@@ -14,11 +15,13 @@
 #include "signals/Sigchld.hpp"
 #include "signals/SignalManager.hpp"
 
+#include <algorithm>
 #include <csignal>
 #include <iostream>
 #include <map>
 #include <ostream>
 #include <string>
+#include <sys/wait.h>
 #include <unistd.h>
 
 extern char** environ;
@@ -60,7 +63,23 @@ Repl::Repl()
                                    m_dispatcher_,
                                    m_cmdRunner_);
     };
-    m_executor_ = std::make_unique<exec::Executor>(m_state_, m_dispatcher_, m_cmdRunner_);
+    m_procSubRunner_ = [this](const std::string& text,
+                             bool writeMode) -> std::string
+    {
+        auto tokenizer = parser::Tokenizer(text);
+        const auto& tokens = tokenizer.Tokenize();
+        auto ast = parser::Parser(tokens).Parse();
+        return exec::StartProcessSub(ast,
+                                     m_state_,
+                                     m_dispatcher_,
+                                     m_cmdRunner_,
+                                     writeMode);
+    };
+    m_executor_ = std::make_unique<exec::Executor>(m_state_,
+                                                   m_dispatcher_,
+                                                   m_cmdRunner_,
+                                                   STDOUT_FILENO,
+                                                   m_procSubRunner_);
     m_editor_ = std::make_unique<line::LineEditor>(m_terminal_, m_history_);
     m_history_.Load();
 }
@@ -223,6 +242,7 @@ int Repl::EvalLine(const std::string& line)
         const auto& parser = parser::Parser(tokens).Parse();
         auto res = m_executor_->Run(parser);
         m_state_->SetLastCommandExitCode(res);
+        CleanupProcSubs();
         return res;
     }
     catch (const exec::ExecException& ex)
@@ -247,7 +267,26 @@ int Repl::EvalLine(const std::string& line)
         std::string out = std::string(ex.what()) + "\n";
         io::fdops::WriteAll(STDOUT_FILENO, out);
     }
+    CleanupProcSubs();
     return 1;
+}
+
+void Repl::CleanupProcSubs()
+{
+    // Closing the parent-side fd is what delivers EOF/SIGPIPE to a
+    // process substitution's child once the foreground command no
+    // longer needs it; do that before reaping. A child that hasn't
+    // exited yet is polled again on the next command instead of
+    // blocking the prompt (bash does not wait on these either).
+    for (const auto& sub : m_state_->TakeProcSubs())
+    {
+        close(sub.fd);
+        if (waitpid(sub.pid, nullptr, WNOHANG) == 0)
+            m_pendingProcSubPids_.push_back(sub.pid);
+    }
+    std::erase_if(m_pendingProcSubPids_,
+                  [](pid_t pid)
+                  { return waitpid(pid, nullptr, WNOHANG) != 0; });
 }
 
 } // namespace shell

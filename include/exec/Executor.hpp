@@ -55,7 +55,9 @@ public:
         std::unique_ptr<shell::ShellState>& state,
         std::unique_ptr<builtins ::BuiltinDispatcher>& builtins,
         const shell::expander::CommandRunner& cmdRunner,
-        int outFd = STDOUT_FILENO);
+        int outFd = STDOUT_FILENO,
+        shell::expander::ProcSubRunner procSubRunner =
+            shell::expander::ProcSubRunner{});
 
     int Run(const std::shared_ptr<parser::ast::AstNode>& root);
 
@@ -119,6 +121,7 @@ private:
     int m_status_ = 0;
     const shell::expander::CommandRunner& m_cmdRunner_;
     int m_outFd_;
+    shell::expander::ProcSubRunner m_procSubRunner_;
     bool m_inCompound_ = false;
     bool m_inForkedChild_ = false;
     int m_loopDepth_ = 0;

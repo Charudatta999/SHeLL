@@ -41,6 +41,7 @@
 #include <memory>
 #include <syslog.h>
 #include <unistd.h>
+#include <utility>
 
 namespace
 {
@@ -196,11 +197,13 @@ Executor::Executor(
     std::unique_ptr<shell::ShellState>& state,
     std::unique_ptr<builtins ::BuiltinDispatcher>& builtins,
     const shell::expander::CommandRunner& cmdRunner,
-    int outFd)
+    int outFd,
+    shell::expander::ProcSubRunner procSubRunner)
     : m_state_(state)
     , m_builtins_(builtins)
     , m_cmdRunner_(cmdRunner)
     , m_outFd_(outFd)
+    , m_procSubRunner_(std::move(procSubRunner))
     , m_suspendedHandle_({})
     , m_suspendedPgid_(-1)
     , m_resumedStatus_(-1)
@@ -341,7 +344,8 @@ Executor::BuildSpec(const std::vector<std::string>& argv,
             shell::expander::Expand(assignment.second,
                                     m_state_,
                                     m_cmdRunner_,
-                                    true)
+                                    true,
+                                    m_procSubRunner_)
                 .front();
     spec.env.reserve(env.size());
     for (const auto& entry : env)
@@ -378,8 +382,11 @@ Executor::ExpandArgv(const std::vector<std::string>& argv)
     {
         for (const auto& braced : shell::expander::BraceExpand(word))
         {
-            auto pieces =
-                shell::expander::Expand(braced, m_state_, m_cmdRunner_);
+            auto pieces = shell::expander::Expand(braced,
+                                                  m_state_,
+                                                  m_cmdRunner_,
+                                                  false,
+                                                  m_procSubRunner_);
             for (auto& piece : pieces)
                 out.push_back(std::move(piece));
         }
@@ -400,7 +407,8 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
                 shell::expander::Expand(assignment.second,
                                         m_state_,
                                         m_cmdRunner_,
-                                        true)
+                                        true,
+                                        m_procSubRunner_)
                     .front();
             if (!m_state_->SetVar(assignment.first, value))
             {

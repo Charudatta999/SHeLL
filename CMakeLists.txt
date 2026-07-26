@@ -126,6 +126,7 @@ add_library(shell_core STATIC
     src/exec/WaitStatus.cpp
     src/exec/ProcessExecutor.cpp
     src/exec/CaptureOutput.cpp
+    src/exec/ProcessSubstitution.cpp
 
     # --- Line Editor ---
     src/line/Terminal.cpp

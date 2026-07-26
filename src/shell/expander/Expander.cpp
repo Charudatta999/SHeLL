@@ -318,7 +318,10 @@ std::pair<int, int> FindFirstGroup(const std::string& word)
 } // namespace
 
 std::vector<std::string> Expand(const std::string& word,
-                                std::unique_ptr<ShellState>& state,  const CommandRunner& cmdRunner, bool assignment)
+                                std::unique_ptr<ShellState>& state,
+                                const CommandRunner& cmdRunner,
+                                bool assignment,
+                                const ProcSubRunner& procSubRunner)
 {
     std::string out;
     ShellArithmeticVars adapter(state);
@@ -362,6 +365,14 @@ std::vector<std::string> Expand(const std::string& word,
         {
             pos += 2; // skip "$(" so the body scan starts inside
             out+= cmdRunner(ReadCommandBody(word, pos));
+        }
+        else if ((word[pos] == '<' || word[pos] == '>') &&
+                 pos + 1 < word.size() && word[pos + 1] == '(' &&
+                 procSubRunner)
+        {
+            const bool writeMode = (word[pos] == '>');
+            pos += 2; // skip "<(" / ">(" so the body scan starts inside
+            out += procSubRunner(ReadCommandBody(word, pos), writeMode);
         }
         else if (word[pos] == '$' && word[pos + 1] == '{')
         {
