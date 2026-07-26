@@ -129,9 +129,10 @@ Token Tokenizer::ReadWord()
     size_t tokCol = m_col_;
 
     // ── Fd-prefixed redirect: single digit immediately followed by <
-    // or > ──
+    // or > (but not a process substitution like 2<(cmd), which is a
+    // word) ──
     if (std::isdigit(static_cast<unsigned char>(Peek())) &&
-        (Peek(1) == '<' || Peek(1) == '>'))
+        (Peek(1) == '<' || Peek(1) == '>') && Peek(2) != '(')
     {
         int fd = Peek() - '0';
         Advance(); // consume digit
@@ -233,8 +234,40 @@ Token Tokenizer::ReadWord()
     // ── Regular word
     // ──────────────────────────────────────────────────────
     std::string value;
-    while (!AtEnd() && IsWordChar(Peek()))
+    while (!AtEnd() &&
+           (IsWordChar(Peek()) ||
+            ((Peek() == '<' || Peek() == '>') && Peek(1) == '(')))
     {
+        // Process substitution: <(cmd) or >(cmd). Balanced parens are
+        // consumed as one unit, same shape as the $( ) case below.
+        if ((Peek() == '<' || Peek() == '>') && Peek(1) == '(')
+        {
+            size_t depth = 1;
+            value += Advance(); // '<' or '>'
+            value += Advance(); // '('
+            while (!AtEnd())
+            {
+                if (Peek() == '(')
+                {
+                    ++depth;
+                }
+                else if (Peek() == ')')
+                {
+                    --depth;
+                }
+                value += Advance();
+                if (depth == 0)
+                {
+                    break;
+                }
+            }
+            if (depth != 0)
+            {
+                throw IncompleteInputException(
+                    "unterminated process substitution");
+            }
+            continue;
+        }
         if (Peek() == '$')
         {
 
@@ -559,6 +592,15 @@ std::vector<Token> Tokenizer::Tokenize()
 
         if (chr == '<')
         {
+            if (Peek(1) == '(')
+            {
+                // Process substitution <(cmd) — a word, not a
+                // redirect. `< <(cmd)` still redirects: the space
+                // before the second '<' keeps this branch from
+                // firing on the redirect token itself.
+                tokens.push_back(ReadWord());
+                continue;
+            }
             Advance();
             if (Peek() == '<')
             {
@@ -621,6 +663,13 @@ std::vector<Token> Tokenizer::Tokenize()
 
         if (chr == '>')
         {
+            if (Peek(1) == '(')
+            {
+                // Process substitution >(cmd) — a word, not a
+                // redirect.
+                tokens.push_back(ReadWord());
+                continue;
+            }
             Advance();
             if (Peek() == '>')
             {

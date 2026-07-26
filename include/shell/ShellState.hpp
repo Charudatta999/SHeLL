@@ -246,6 +246,26 @@ public:
     [[nodiscard]]
     bool HasSavedTerminalModes() const;
 
+    // Process substitution bookkeeping (<(cmd), >(cmd))
+
+    /// @brief A live process substitution: the parent-side fd handed
+    ///        out as /dev/fd/N, and the child pid running its body.
+    struct ProcSub
+    {
+        int fd;
+        pid_t pid;
+    };
+
+    /// @brief Register a process substitution started during word
+    ///        expansion, so its fd can be closed and its child reaped
+    ///        once the foreground command has been launched.
+    void AddProcSub(int fd, pid_t pid);
+
+    /// @brief Hand the caller every process substitution registered
+    ///        since the last call, clearing the pending list.
+    [[nodiscard]]
+    std::vector<ProcSub> TakeProcSubs();
+
 private:
     std::string m_cwd_;
     std::map<std::string, std::string> m_vars_;
@@ -264,6 +284,7 @@ private:
     std::unique_ptr<signals::SignalManager> m_sigMgr_;
     struct termios m_savedTermios_;
     bool m_hasSavedTermios_;
+    std::vector<ProcSub> m_procSubs_;
 };
 } // namespace shell
 #endif // SHELL_SHELL_STATE_HPP

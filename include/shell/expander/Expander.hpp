@@ -12,8 +12,18 @@ namespace shell
 namespace expander
 {
 using CommandRunner = std::function<std::string(const std::string&)>;
-std::vector<std::string> Expand(const std::string& word,
-                                std::unique_ptr<ShellState>& state,  const CommandRunner& cmdRunner,bool assignment = false);
+// Process substitution: runs the body of <(cmd) (writeMode=false) or
+// >(cmd) (writeMode=true) and returns the /dev/fd/N path spliced into
+// the word in its place.
+using ProcSubRunner =
+    std::function<std::string(const std::string&, bool writeMode)>;
+
+std::vector<std::string>
+Expand(const std::string& word,
+      std::unique_ptr<ShellState>& state,
+      const CommandRunner& cmdRunner,
+      bool assignment = false,
+      const ProcSubRunner& procSubRunner = ProcSubRunner{});
 
 // Purely textual, stateless brace expansion. Runs before every other
 // expansion. One word in, >= 1 word out (a word with no valid brace

@@ -320,4 +320,16 @@ void ShellState::SaveTerminalModes()
     auto res = tcgetattr(STDIN_FILENO, &m_savedTermios_);
     m_hasSavedTermios_ = (res != -1);
 }
+
+void ShellState::AddProcSub(int fd, pid_t pid)
+{
+    m_procSubs_.push_back({.fd = fd, .pid = pid});
+}
+
+std::vector<ShellState::ProcSub> ShellState::TakeProcSubs()
+{
+    std::vector<ProcSub> pending = std::move(m_procSubs_);
+    m_procSubs_.clear();
+    return pending;
+}
 } // namespace shell

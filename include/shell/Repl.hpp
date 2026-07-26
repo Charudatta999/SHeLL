@@ -9,6 +9,8 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <sys/types.h>
+#include <vector>
 
 namespace builtins
 {
@@ -41,10 +43,16 @@ private:
     bool ReadLine(std::string& line);       // non-interactive fallback
     int  EvalLine(const std::string& line);
 
+    // Closes/reaps any process substitutions (<(cmd), >(cmd)) started
+    // while expanding the command that just finished running.
+    void CleanupProcSubs();
+
     std::unique_ptr<ShellState> m_state_;
     std::unique_ptr<builtins::BuiltinDispatcher> m_dispatcher_;
     std::function<std::string(const std::string&)> m_cmdRunner_;
+    shell::expander::ProcSubRunner m_procSubRunner_;
     std::unique_ptr<exec::Executor> m_executor_;
+    std::vector<pid_t> m_pendingProcSubPids_;
 
     line::Terminal m_terminal_;
     line::History m_history_;
