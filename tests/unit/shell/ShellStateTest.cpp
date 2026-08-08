@@ -129,6 +129,16 @@ TEST(ShellState, GetEnvOnlyContainsExported)
     EXPECT_EQ(env.at("PUB"), "1");
 }
 
+TEST(ShellState, GetEnvOmitsExportedNameWithoutValue)
+{
+    auto s = make();
+    s.ExportVar("EMPTY");
+    EXPECT_EQ(s.GetEnv().count("EMPTY"), 0u);
+    s.SetVar("EMPTY", "");
+    EXPECT_EQ(s.GetEnv().count("EMPTY"), 1u);
+    EXPECT_EQ(s.GetEnv().at("EMPTY"), "");
+}
+
 TEST(ShellState, GetLocalVarsExcludesExported)
 {
     auto s = make();
@@ -316,4 +326,12 @@ TEST(ShellState, SetPositionalParamsReplaces)
     s.SetPositionalParams({"c"});
     ASSERT_EQ(s.GetPositionalParams().size(), 1u);
     EXPECT_EQ(s.GetPositionalParams()[0], "c");
+}
+
+TEST(ShellState, Arg0DefaultsToShell)
+{
+    auto s = make();
+    EXPECT_EQ(s.GetArg0(), "shell");
+    s.SetArg0("mysh");
+    EXPECT_EQ(s.GetArg0(), "mysh");
 }

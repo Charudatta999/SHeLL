@@ -95,6 +95,12 @@ void JobTable::RemoveByID(int id)
     DropFromRecency(id);
 }
 
+void JobTable::Clear()
+{
+    m_jobs_.clear();
+    m_recency_.clear();
+}
+
 int JobTable::AddSuspended(
     pid_t pid,
     const std::string& command,

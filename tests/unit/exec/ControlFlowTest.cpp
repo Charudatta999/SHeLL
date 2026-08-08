@@ -139,11 +139,40 @@ TEST(ControlFlow, ReturnDoesNotEscapeNestedCall)
     EXPECT_EQ(run("f() { return 5; }; g() { f; return 6; }; g"), 6);
 }
 
+// Deliberate deviation from bash (gaps note G22): a function is not a
+// loop boundary here. bash prints 1 2 3 for
+//   f() { break; }; for i in 1 2 3; do echo $i; f; done
+// warning each pass and leaving the caller's loop alone; zsh breaks the
+// caller's loop, and that is the behavior we keep.
 TEST(ControlFlow, FunctionBreakReachesCallersLoop)
 {
     EXPECT_EQ(run("f() { break; }; n=0; for i in 1 2; do "
                   "((n = n + 1)); f; ((n = n + 100)); done; "
                   "((n == 1))"),
+              0);
+}
+
+// A `break` that leaves a function body unwinds past the call site.
+// The call's prefix assignments and the callee's positionals must not
+// survive that unwind (bash restores both).
+TEST(ControlFlow, FunctionBreakRestoresPrefixAssignment)
+{
+    EXPECT_EQ(run("FOO=orig; f() { break; }; "
+                  "for i in 1; do FOO=bar f; done; test orig = $FOO"),
+              0);
+}
+
+TEST(ControlFlow, FunctionBreakRestoresCallerPositionals)
+{
+    EXPECT_EQ(run("set -- outer; f() { break; }; "
+                  "for i in 1; do f inner; done; test outer = $1"),
+              0);
+}
+
+TEST(ControlFlow, FunctionContinueRestoresPrefixAssignment)
+{
+    EXPECT_EQ(run("FOO=orig; f() { continue; }; "
+                  "for i in 1; do FOO=bar f; done; test orig = $FOO"),
               0);
 }
 

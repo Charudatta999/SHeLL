@@ -42,5 +42,12 @@ std::string StartProcessSub(
     const shell::expander::CommandRunner& cmdRunner,
     bool writeMode);
 
+// Shared binder used by Repl, CaptureOutput, and nested proc-sub
+// bodies: tokenize → parse → StartProcessSub.
+shell::expander::ProcSubRunner MakeProcSubRunner(
+    std::unique_ptr<shell::ShellState>& state,
+    std::unique_ptr<builtins::BuiltinDispatcher>& dispatcher,
+    const shell::expander::CommandRunner& cmdRunner);
+
 } // namespace exec
 #endif // EXEC_PROCESSSUBSTITUTION_HPP

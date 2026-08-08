@@ -42,6 +42,9 @@ int Cd(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ct
         ctx->m_state_->SetCWD(buf);
         ctx->m_state_->SetVar("OLDPWD", oldPwd);
         ctx->m_state_->SetVar("PWD", buf);
+        // Bash keeps PWD/OLDPWD in the child environment.
+        ctx->m_state_->ExportVar("OLDPWD");
+        ctx->m_state_->ExportVar("PWD");
     }
     return 0;
 }

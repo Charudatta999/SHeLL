@@ -75,3 +75,51 @@ TEST(VariableBuiltins, SetOptionStored)
     EXPECT_EQ(run("set -o pipefail"), 0);
     EXPECT_NE(run("set -q"), 0); // invalid option
 }
+
+TEST(VariableBuiltins, FunctionBindsPositionalParams)
+{
+    EXPECT_EQ(run("f() { test hello = $1; }; f hello"), 0);
+    EXPECT_EQ(run("f() { test 2 = $#; }; f a b"), 0);
+    // Caller positionals restored after the call.
+    EXPECT_EQ(run("set -- outer; f() { return 0; }; f inner; "
+                  "test outer = $1"),
+              0);
+}
+
+TEST(VariableBuiltins, PrefixAssignmentOnBuiltin)
+{
+    // Prefix value is visible only for the builtin; restored after.
+    EXPECT_EQ(run("FOO=orig; FOO=bar pwd >/dev/null; test orig = $FOO"),
+              0);
+    EXPECT_EQ(run("FOO=bar pwd >/dev/null; test x = x$FOO"), 0);
+}
+
+TEST(VariableBuiltins, PrefixAssignmentOnFunction)
+{
+    EXPECT_EQ(run("f() { test bar = $FOO; }; FOO=bar f"), 0);
+    EXPECT_EQ(run("FOO=keep; f() { FOO=temp; }; FOO=bar f; "
+                  "test keep = $FOO"),
+              0);
+    // Prefix assignments are exported for the callee's duration.
+    EXPECT_EQ(
+        run("f() { /usr/bin/env | grep -q '^FOO=bar$'; }; FOO=bar f"),
+        0);
+}
+
+TEST(VariableBuiltins, ExportNameOnlyOmitsFromChildEnv)
+{
+    // POSIX/bash: export without assignment marks the name but does
+    // not put NAME= into environ until assigned.
+    EXPECT_NE(
+        run("export EMPTY; /usr/bin/env | grep -q '^EMPTY='"),
+        0);
+}
+
+TEST(VariableBuiltins, UnsetVarLeavesFunction)
+{
+    EXPECT_EQ(run("x=1; x() { return 0; }; unset x; test x = x$x"),
+              0);
+    // Bash: with no options, unset refers to the variable; the
+    // function of the same name survives.
+    EXPECT_EQ(run("x=1; x() { return 0; }; unset x; x"), 0);
+}

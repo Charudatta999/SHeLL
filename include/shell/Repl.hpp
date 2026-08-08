@@ -38,6 +38,9 @@ public:
     // Runs the loop until `exit` or EOF (Ctrl-D). Returns the shell exit status.
     int Run();
 
+    /// @brief Set the name expanded by `$0` (typically `argv[0]`).
+    void SetArg0(std::string name);
+
 private:
     std::string BuildPrompt();
     bool ReadLine(std::string& line);       // non-interactive fallback
