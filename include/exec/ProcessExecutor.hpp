@@ -21,7 +21,10 @@ public:
     ProcessExecutor& operator=(ProcessExecutor&&) = delete;
 
     [[nodiscard]]
-    int Run(const std::function<int()>& childFn, pid_t pgid, WaitMode mode = WaitMode::Foreground);
+    int Run(const std::function<int()>& childFn,
+            pid_t pgid,
+            WaitMode mode = WaitMode::Foreground,
+            bool setPgid = true);
 
     [[nodiscard]]
     pid_t Pid() const;
@@ -32,7 +35,9 @@ public:
     [[nodiscard]]
     int ExitCode() const;
 
-    void Fork(const std::function<int()>& childFn, pid_t pgid);
+    void Fork(const std::function<int()>& childFn,
+              pid_t pgid,
+              bool setPgid = true);
 
     [[noreturn]]
     void Exec(const CommandSpec& spec);

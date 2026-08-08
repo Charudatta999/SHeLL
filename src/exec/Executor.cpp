@@ -457,7 +457,8 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
                 proc.Exec(spec);
                 return EXIT_FAILURE;
             },
-            0);
+            0,
+            m_state_->IsJobControlEnabled());
 
         auto waitMode = m_state_->IsJobControlEnabled()
                             ? WaitMode::Foreground
@@ -521,7 +522,8 @@ std::vector<ProcessExecutor> Executor::LaunchStages(
                 RunToCompletion(stages[idx]);
                 return m_status_;
             },
-            pgid);
+            pgid,
+            m_state_->IsJobControlEnabled());
         pgid = runners[0].Pid();
     }
     return runners;
@@ -646,7 +648,8 @@ coro::Task Executor::Visit(parser::ast::Subshell& node)
         },
         0,
         m_state_->IsJobControlEnabled() ? WaitMode::Foreground
-                                        : WaitMode::Poll);
+                                        : WaitMode::Poll,
+        m_state_->IsJobControlEnabled());
     co_return m_status_;
 }
 
@@ -658,25 +661,32 @@ coro::Task Executor::Visit(parser::ast::List& list)
     {
         if (item.background)
         {
+            // With `set +m` the job gets no group of its own, so it
+            // stays in the shell's group and is not separately
+            // signalable — bash behaves the same way.
+            const bool jobControl = m_state_->IsJobControlEnabled();
             auto runner = ProcessExecutor();
             int errCode = runner.Run(
                 [&]
                 {
-                    setpgid(0,
-                            0); // own group -> kill(-pgid) reaches it
+                    if (jobControl)
+                        setpgid(0,
+                                0); // own group -> kill(-pgid) reaches it
                     m_state_->EnableJobControl(false);
                     RunToCompletion(item.node);
                     return m_status_;
                 },
                 0,
-                WaitMode::Poll);
+                WaitMode::Poll,
+                jobControl);
             if (errCode == PROCESS_RUNNING)
             {
                 pid_t pid = runner.Pid();
                 if (pid > 0)
                 {
-                    setpgid(pid, pid); // parent half of the
-                                       // race-guarded setpgid
+                    if (jobControl)
+                        setpgid(pid, pid); // parent half of the
+                                           // race-guarded setpgid
                     auto& jobTable = m_state_->GetJobs();
                     auto id =
                         jobTable->Add(pid, item.node->SourceText());

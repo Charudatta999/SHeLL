@@ -47,6 +47,19 @@ int Set(const std::vector<std::string>& argv,
         return 0;
     }
 
+    // `-m` and `-o monitor` are the same switch in bash, but job
+    // control lives in its own ShellState flag rather than the option
+    // map. Write both so the two spellings agree and a future no-arg
+    // `set -o` listing reports it correctly.
+    auto applyMonitor = [&ctx](bool enable)
+    {
+        ctx->m_state_->EnableJobControl(enable);
+        if (enable)
+            ctx->m_state_->SetOption("monitor");
+        else
+            ctx->m_state_->DisableOption("monitor");
+    };
+
     bool sawSeparator = false;
     std::size_t i = 1;
     for (; i < argv.size(); ++i)
@@ -68,6 +81,11 @@ int Set(const std::vector<std::string>& argv,
                 return 2;
             }
             ++i;
+            if (argv[i] == "monitor")
+            {
+                applyMonitor(arg[0] == '-');
+                continue;
+            }
             if (arg[0] == '-')
                 ctx->m_state_->SetOption(argv[i]);
             else
@@ -78,6 +96,12 @@ int Set(const std::vector<std::string>& argv,
         {
             for (std::size_t j = 1; j < arg.size(); ++j)
             {
+                if (arg[j] == 'm')
+                {
+                    applyMonitor(arg[0] == '-');
+                    continue;
+                }
+
                 const char* longName = LongOptionName(arg[j]);
                 if (!longName)
                 {

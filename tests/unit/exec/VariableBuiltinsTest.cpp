@@ -69,6 +69,87 @@ TEST(VariableBuiltins, ExportInvalidNameFails)
     EXPECT_NE(run("export 1BAD=x"), 0);
 }
 
+// #49: `set -m` is the user-facing job-control switch. The shell
+// language exposes no way to read the flag back, so these drive the
+// executor directly and query ShellState.
+namespace
+{
+int runOn(std::unique_ptr<shell::ShellState>& state,
+          const std::string& src)
+{
+    auto disp = std::make_unique<builtins::BuiltinDispatcher>();
+    shell::expander::CommandRunner stubRunner =
+        [](const std::string&) { return std::string{}; };
+    exec::Executor exec(state, disp, stubRunner);
+
+    parser::Tokenizer tok(src);
+    parser::Parser p(tok.Tokenize());
+    auto tree = p.Parse();
+    return exec.Run(tree);
+}
+
+std::unique_ptr<shell::ShellState> freshState()
+{
+    return std::make_unique<shell::ShellState>(
+        std::map<std::string, std::string>{});
+}
+} // namespace
+
+TEST(VariableBuiltins, SetMonitorTogglesJobControl)
+{
+    auto state = freshState();
+    ASSERT_FALSE(state->IsJobControlEnabled()); // default off
+
+    EXPECT_EQ(runOn(state, "set -m"), 0);
+    EXPECT_TRUE(state->IsJobControlEnabled());
+
+    EXPECT_EQ(runOn(state, "set +m"), 0);
+    EXPECT_FALSE(state->IsJobControlEnabled());
+}
+
+TEST(VariableBuiltins, SetMonitorLongFormMatchesShortForm)
+{
+    auto state = freshState();
+
+    EXPECT_EQ(runOn(state, "set -o monitor"), 0);
+    EXPECT_TRUE(state->IsJobControlEnabled());
+
+    EXPECT_EQ(runOn(state, "set +o monitor"), 0);
+    EXPECT_FALSE(state->IsJobControlEnabled());
+}
+
+TEST(VariableBuiltins, SetMonitorKeepsOptionMapInSync)
+{
+    auto state = freshState();
+
+    EXPECT_EQ(runOn(state, "set -m"), 0);
+    EXPECT_TRUE(state->IsOptionEnabled("monitor"));
+
+    EXPECT_EQ(runOn(state, "set +m"), 0);
+    EXPECT_FALSE(state->IsOptionEnabled("monitor"));
+}
+
+TEST(VariableBuiltins, SetMonitorCombinesWithOtherFlags)
+{
+    auto state = freshState();
+
+    EXPECT_EQ(runOn(state, "set -em"), 0);
+    EXPECT_TRUE(state->IsJobControlEnabled());
+    EXPECT_TRUE(state->IsOptionEnabled("errexit"));
+
+    EXPECT_EQ(runOn(state, "set +me"), 0);
+    EXPECT_FALSE(state->IsJobControlEnabled());
+    EXPECT_FALSE(state->IsOptionEnabled("errexit"));
+}
+
+TEST(VariableBuiltins, SetMonitorLeavesPositionalsAlone)
+{
+    auto state = freshState();
+    EXPECT_EQ(runOn(state, "set -- a b c"), 0);
+    EXPECT_EQ(runOn(state, "set -m"), 0);
+    EXPECT_EQ(state->GetPositionalParams().size(), 3U);
+}
+
 TEST(VariableBuiltins, SetOptionStored)
 {
     EXPECT_EQ(run("set -e"), 0);
