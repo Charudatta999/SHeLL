@@ -30,6 +30,9 @@ ShellState::ShellState(
     // Off until an interactive, tty-owning shell turns it on in Repl::Run.
     // Tests and non-interactive use must not attempt terminal handoff.
     , m_jobControl_(false)
+    // Set from argv[0]/--login in main; a plain `shellrepl` is not a
+    // login shell.
+    , m_loginShell_(false)
     , m_sigMgr_(std::make_unique<signals::SignalManager>())
     ,m_savedTermios_{ }
     ,m_hasSavedTermios_(false)
@@ -293,6 +296,16 @@ void ShellState::EnableJobControl(bool enable)
 bool ShellState::IsJobControlEnabled() const
 {
     return m_jobControl_;
+}
+
+void ShellState::SetLoginShell(bool login)
+{
+    m_loginShell_ = login;
+}
+
+bool ShellState::IsLoginShell() const
+{
+    return m_loginShell_;
 }
 
 const std::unique_ptr<signals::SignalManager>& ShellState::GetSignalMgr()

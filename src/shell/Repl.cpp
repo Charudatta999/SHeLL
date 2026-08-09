@@ -48,11 +48,12 @@ std::map<std::string, std::string> LoadEnvironMap()
 namespace shell
 {
 
-Repl::Repl()
+Repl::Repl(bool loginShell)
     : m_state_(std::make_unique<ShellState>(LoadEnvironMap()))
     , m_dispatcher_(std::make_unique<builtins::BuiltinDispatcher>())
     , m_history_(m_state_->GetVar("HOME").value_or("") + "/.shell_history")
 {
+    m_state_->SetLoginShell(loginShell);
     m_cmdRunner_ = [this](const std::string& text) -> std::string
     {
         auto tokenizer = parser::Tokenizer(text);
@@ -85,6 +86,21 @@ Repl::Repl()
 }
 
 Repl::~Repl() = default;
+
+bool Repl::IsLoginInvocation(int argc, const char* const argv[])
+{
+    if (argc > 0 && argv[0] != nullptr && argv[0][0] == '-')
+        return true;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (argv[i] == nullptr)
+            continue;
+        const std::string arg = argv[i];
+        if (arg == "--login" || arg == "-l")
+            return true;
+    }
+    return false;
+}
 
 int Repl::Run()
 {

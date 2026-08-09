@@ -154,6 +154,7 @@ add_library(shell_core STATIC
     src/builtins/Unset.cpp
     src/builtins/Set.cpp
     src/builtins/Readonly.cpp
+    src/builtins/Suspend.cpp
 
     # --- Coroutines ---
     src/coro/Task.cpp

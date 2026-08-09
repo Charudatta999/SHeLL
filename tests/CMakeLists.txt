@@ -28,6 +28,7 @@ add_executable(shell_tests
     unit/exec/SelectTest.cpp
     unit/exec/ArithmeticCommandTest.cpp
     unit/exec/VariableBuiltinsTest.cpp
+    unit/exec/SuspendBuiltinTest.cpp
     unit/arithmetic/ArithmeticEngineTest.cpp
 )
 
