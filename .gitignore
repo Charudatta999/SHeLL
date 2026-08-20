@@ -83,3 +83,4 @@ third_party/lib64/**
 third_party/src/**
 third_party/share/**
 third_party/bin/**
+third_party/Library-sources/

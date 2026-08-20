@@ -20,6 +20,8 @@ ShellState::ShellState(
     : m_cwd_{std::filesystem::current_path().string()}
     , m_vars_{globalVars}
     , m_exportedVars_{}
+    , m_positionalParams_{}
+    , m_arg0_{"shell"}
     , m_lastCommandExitCode_{0}
     , m_runningFlag_{true}
     , m_shellOptions_{}
@@ -133,6 +135,11 @@ void ShellState::ExportVar(const std::string& varName) noexcept
     }
 }
 
+void ShellState::UnexportVar(const std::string& varName) noexcept
+{
+    m_exportedVars_.erase(varName);
+}
+
 const std::set<std::string>& ShellState::GetExportedNames() const
 {
     return m_exportedVars_;
@@ -140,13 +147,14 @@ const std::set<std::string>& ShellState::GetExportedNames() const
 
 std::map<std::string, std::string> ShellState::GetEnv() const
 {
+    // Only names that currently have a value. `export FOO` (no
+    // assignment) marks the name for later export but does not put
+    // FOO= into environ until FOO is set — POSIX/bash.
     std::map<std::string, std::string> envVars;
     for (const auto& itr : m_vars_)
     {
         if (m_exportedVars_.count(itr.first))
-        {
             envVars.emplace(itr);
-        }
     }
     return envVars;
 }
@@ -188,6 +196,16 @@ const std::vector<std::string>&
 ShellState::GetPositionalParams() const
 {
     return m_positionalParams_;
+}
+
+void ShellState::SetArg0(std::string name)
+{
+    m_arg0_ = std::move(name);
+}
+
+const std::string& ShellState::GetArg0() const
+{
+    return m_arg0_;
 }
 
 // ── Exit codes

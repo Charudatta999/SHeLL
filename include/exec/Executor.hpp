@@ -13,8 +13,10 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 namespace builtins
@@ -104,6 +106,37 @@ private:
     SuspendedCoro::ResumeResult ResumeSuspended(SuspendedCoro& rec,
                                                 int leafStatus);
 
+    // Prefix assignments + positionals for a function/builtin call.
+    // Held on the Executor (not coroutine-frame locals) so Ctrl-Z can
+    // park/restore them at the suspend boundary — RAII in a
+    // suspendable frame would leave FOO=bar / $1 visible at the prompt.
+    struct CallFrame
+    {
+        struct PrefixEntry
+        {
+            std::string name;
+            std::optional<std::string> previous;
+            bool wasExported = false;
+            std::string value;
+        };
+        std::vector<PrefixEntry> prefixes;
+        std::vector<std::string> savedPositionals;
+        std::vector<std::string> appliedPositionals;
+        bool hasPositionals = false;
+        bool parked = false;
+    };
+
+    [[nodiscard]]
+    bool PushCallFrame(
+        const std::vector<std::pair<std::string, std::string>>&
+            assignments,
+        std::optional<std::vector<std::string>> positionals);
+    void PopCallFrame();
+    void ApplyCallFrame(CallFrame& frame);
+    void RestoreCallFrame(const CallFrame& frame);
+    void ParkCallFrames();
+    void UnparkCallFrames();
+
     std::vector<ProcessExecutor> LaunchStages(
         const std::vector<std::unique_ptr<parser::ast::AstNode>>& stages,
         const std::vector<std::unique_ptr<io::Pipe>>& pipes);
@@ -128,6 +161,7 @@ private:
     std::coroutine_handle<> m_suspendedHandle_;
     pid_t m_suspendedPgid_;
     int m_resumedStatus_;
+    std::vector<CallFrame> m_callFrames_;
 };
 } // namespace exec
 #endif // EXEC_EXECUTOR_HPP

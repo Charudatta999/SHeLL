@@ -42,6 +42,9 @@ int Unset(const std::vector<std::string>& argv,
                 status = 1;
                 continue;
             }
+            // Bash: with no options, each name refers to a variable;
+            // only if there is no variable by that name is a function
+            // of the same name unset.
             bool hadVar = ctx->m_state_->GetVar(name).has_value();
             ctx->m_state_->UnSetVar(name);
             if (hadVar || varsOnly)

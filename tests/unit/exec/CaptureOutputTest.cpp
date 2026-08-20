@@ -7,9 +7,11 @@
 
 #include <gtest/gtest.h>
 
+#include <csignal>
 #include <map>
 #include <memory>
 #include <string>
+#include <sys/time.h>
 
 #include "builtins/BuiltinDispatcher.hpp"
 #include "exec/CaptureOutput.hpp"
@@ -54,4 +56,43 @@ TEST(CaptureOutput, CapturesMultipleCommands)
 TEST(CaptureOutput, EmptyOutputIsEmptyString)
 {
     EXPECT_EQ(capture("true"), "");
+}
+
+TEST(CaptureOutput, ProcessSubstitutionExpands)
+{
+    EXPECT_EQ(capture("cat <(printf hi)"), "hi");
+}
+
+// SIGCHLD is installed without SA_RESTART (signals/Sigchld.cpp), so the
+// captured child's own exit can interrupt the capture read mid-stream.
+// Treating that EINTR as EOF silently truncates `$(...)`. Reproduce it
+// with a repeating SIGALRM while capturing far more than one buffer.
+TEST(CaptureOutput, SignalDuringReadDoesNotTruncate)
+{
+    struct sigaction alarmAction
+    {
+    };
+    alarmAction.sa_handler = [](int) {};
+    alarmAction.sa_flags = 0; // no SA_RESTART: blocked reads get EINTR
+    sigemptyset(&alarmAction.sa_mask);
+    struct sigaction previous
+    {
+    };
+    ASSERT_EQ(sigaction(SIGALRM, &alarmAction, &previous), 0);
+
+    itimerval timer{};
+    timer.it_value.tv_usec = 200;
+    timer.it_interval.tv_usec = 200;
+    ASSERT_EQ(setitimer(ITIMER_REAL, &timer, nullptr), 0);
+
+    // ~108 KiB, so the loop makes many passes over the 4 KiB buffer.
+    const std::string out = capture("seq 1 20000");
+
+    const itimerval stop{};
+    setitimer(ITIMER_REAL, &stop, nullptr);
+    sigaction(SIGALRM, &previous, nullptr);
+
+    ASSERT_FALSE(out.empty());
+    EXPECT_EQ(out.substr(0, 2), "1\n");
+    EXPECT_EQ(out.substr(out.size() - 5), "20000");
 }

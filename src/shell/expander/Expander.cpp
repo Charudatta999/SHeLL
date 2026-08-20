@@ -384,11 +384,16 @@ std::vector<std::string> Expand(const std::string& word,
                             [](unsigned char chr)
                             { return std::isdigit(chr); }))
             {
-                // ${N}: positional parameter, 1-based.
-                const auto& params = state->GetPositionalParams();
-                std::size_t idx = std::stoul(key);
-                if (idx >= 1 && idx <= params.size())
-                    out += params[idx - 1];
+                // ${N}: positional parameter, 1-based; ${0} is arg0.
+                if (key == "0")
+                    out += state->GetArg0();
+                else
+                {
+                    const auto& params = state->GetPositionalParams();
+                    std::size_t idx = std::stoul(key);
+                    if (idx >= 1 && idx <= params.size())
+                        out += params[idx - 1];
+                }
             }
             else
             {
@@ -435,13 +440,17 @@ std::vector<std::string> Expand(const std::string& word,
                  std::isdigit(word[pos + 1]))
         {
             // $1..$9: single digit only, bash semantics ($10 is
-            // ${1}0). $0 falls in range and expands empty (the
-            // shell name is not tracked yet).
-            const auto& params = state->GetPositionalParams();
+            // ${1}0). $0 is the shell/script name (ShellState::GetArg0).
             auto idx =
                 static_cast<std::size_t>(word[pos + 1] - '0');
-            if (idx >= 1 && idx <= params.size())
-                out += params[idx - 1];
+            if (idx == 0)
+                out += state->GetArg0();
+            else
+            {
+                const auto& params = state->GetPositionalParams();
+                if (idx >= 1 && idx <= params.size())
+                    out += params[idx - 1];
+            }
             pos += 2;
         }
         else if (word[pos] == '$' && pos + 1 < word.size() &&

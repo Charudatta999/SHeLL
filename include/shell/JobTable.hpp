@@ -57,6 +57,12 @@ public:
 
     void RemoveByID(int id);
 
+    /// @brief Drop every job (and any SuspendedCoro they own).
+    /// Call while the Executor that those frames reference is still
+    /// alive — coroutine destroy runs CompoundScope dtors that write
+    /// back into it.
+    void Clear();
+
     [[nodiscard]]
     std::optional<int> CurrentId() const;
 
