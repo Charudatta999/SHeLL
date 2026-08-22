@@ -82,5 +82,8 @@ int Set(const std::vector<std::string>& argv,
 
 int Readonly(const std::vector<std::string>& argv,
              std::unique_ptr<BuiltinContext>& ctx);
+
+int Suspend(const std::vector<std::string>& argv,
+            std::unique_ptr<BuiltinContext>& ctx);
 } // namespace builtins
 #endif // BUILTIN_BUILTIN_FUNCTION_HPP

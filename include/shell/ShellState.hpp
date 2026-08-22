@@ -234,6 +234,17 @@ public:
     [[nodiscard]]
     bool IsJobControlEnabled() const;
 
+    /// @brief Record that this shell was started as a login shell
+    ///        (argv[0] beginning with '-', or --login/-l).
+    /// @param login true if the shell is a login shell.
+    void SetLoginShell(bool login);
+
+    /// @brief Test whether this is a login shell. Guards operations
+    ///        that would strand the user's session, e.g. `suspend`.
+    /// @return true if the shell is a login shell.
+    [[nodiscard]]
+    bool IsLoginShell() const;
+
     /// @brief Access the signal manager.
     /// @return Reference to the owned SignalManager.
     const std::unique_ptr<signals::SignalManager>& GetSignalMgr();
@@ -294,6 +305,7 @@ private:
         m_functions_;
     std::unique_ptr<JobTable> m_jobsTable_;
     bool m_jobControl_;
+    bool m_loginShell_;
     std::unique_ptr<signals::SignalManager> m_sigMgr_;
     struct termios m_savedTermios_;
     bool m_hasSavedTermios_;

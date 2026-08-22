@@ -28,7 +28,9 @@ class ShellState;
 class Repl
 {
 public:
-    Repl();
+    /// @param loginShell true when started as a login shell (argv[0]
+    ///        beginning with '-', or --login/-l). Guards `suspend`.
+    explicit Repl(bool loginShell = false);
     ~Repl();
     Repl(const Repl&) = delete;
     Repl& operator=(const Repl&) = delete;
@@ -40,6 +42,12 @@ public:
 
     /// @brief Set the name expanded by `$0` (typically `argv[0]`).
     void SetArg0(std::string name);
+
+    /// @brief Decide whether an invocation is a login shell: argv[0]
+    ///        beginning with '-' (how login(1)/sshd spell it), or an
+    ///        explicit --login / -l flag.
+    [[nodiscard]]
+    static bool IsLoginInvocation(int argc, const char* const argv[]);
 
 private:
     std::string BuildPrompt();

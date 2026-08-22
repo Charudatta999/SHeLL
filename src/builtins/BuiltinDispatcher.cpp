@@ -27,6 +27,7 @@ BuiltinDispatcher::BuiltinDispatcher()
     m_table_["unset"]  = Unset;
     m_table_["set"]  = Set;
     m_table_["readonly"]  = Readonly;
+    m_table_["suspend"]  = Suspend;
 }
 
 bool BuiltinDispatcher::IsBuiltin(const std::string& name) const
