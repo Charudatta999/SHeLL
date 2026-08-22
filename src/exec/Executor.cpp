@@ -39,6 +39,7 @@
 #include <csignal>
 #include <fnmatch.h>
 #include <memory>
+#include <optional>
 #include <syslog.h>
 #include <unistd.h>
 #include <utility>
@@ -112,6 +113,22 @@ std::string TrimBlanks(const std::string& text)
         return "";
     const auto last = text.find_last_not_of(" \t");
     return text.substr(first, last - first + 1);
+}
+
+std::string ExpandAssignmentValue(
+    const std::string& word,
+    std::unique_ptr<shell::ShellState>& state,
+    const shell::expander::CommandRunner& cmdRunner,
+    const shell::expander::ProcSubRunner& procSubRunner)
+{
+    auto pieces = shell::expander::Expand(word,
+                                          state,
+                                          cmdRunner,
+                                          true,
+                                          procSubRunner);
+    if (pieces.empty())
+        return {};
+    return std::move(pieces.front());
 }
 
 // 1-based menu index from the reply, or 0 for anything that is not a
@@ -210,6 +227,111 @@ Executor::Executor(
 {
 }
 
+void Executor::ApplyCallFrame(CallFrame& frame)
+{
+    for (auto& entry : frame.prefixes)
+    {
+        m_state_->SetVar(entry.name, entry.value);
+        // Prefix assignments are exported for the duration of the
+        // call so externals inside the callee see them (bash).
+        m_state_->ExportVar(entry.name);
+    }
+    if (frame.hasPositionals)
+        m_state_->SetPositionalParams(frame.appliedPositionals);
+    frame.parked = false;
+}
+
+void Executor::RestoreCallFrame(const CallFrame& frame)
+{
+    for (auto it = frame.prefixes.rbegin();
+         it != frame.prefixes.rend();
+         ++it)
+    {
+        if (it->previous)
+            m_state_->SetVar(it->name, *it->previous);
+        else
+            m_state_->UnSetVar(it->name);
+        if (it->wasExported)
+            m_state_->ExportVar(it->name);
+        else
+            m_state_->UnexportVar(it->name);
+    }
+    if (frame.hasPositionals)
+        m_state_->SetPositionalParams(frame.savedPositionals);
+}
+
+bool Executor::PushCallFrame(
+    const std::vector<std::pair<std::string, std::string>>&
+        assignments,
+    std::optional<std::vector<std::string>> positionals)
+{
+    CallFrame frame;
+    for (const auto& assignment : assignments)
+    {
+        CallFrame::PrefixEntry entry;
+        entry.name = assignment.first;
+        entry.previous = m_state_->GetVar(entry.name);
+        entry.wasExported = m_state_->IsExported(entry.name);
+        entry.value = ExpandAssignmentValue(assignment.second,
+                                            m_state_,
+                                            m_cmdRunner_,
+                                            m_procSubRunner_);
+        if (!m_state_->SetVar(entry.name, entry.value))
+        {
+            io::fdops::WriteAll(STDERR_FILENO,
+                                entry.name +
+                                    ": readonly variable\n");
+            m_status_ = 1;
+            // Roll back any prefixes already applied for this frame.
+            RestoreCallFrame(frame);
+            return false;
+        }
+        m_state_->ExportVar(entry.name);
+        frame.prefixes.push_back(std::move(entry));
+    }
+    if (positionals)
+    {
+        frame.hasPositionals = true;
+        frame.savedPositionals = m_state_->GetPositionalParams();
+        frame.appliedPositionals = std::move(*positionals);
+        m_state_->SetPositionalParams(frame.appliedPositionals);
+    }
+    m_callFrames_.push_back(std::move(frame));
+    return true;
+}
+
+void Executor::PopCallFrame()
+{
+    if (m_callFrames_.empty())
+        return;
+    CallFrame& frame = m_callFrames_.back();
+    if (!frame.parked)
+        RestoreCallFrame(frame);
+    m_callFrames_.pop_back();
+}
+
+void Executor::ParkCallFrames()
+{
+    for (auto it = m_callFrames_.rbegin(); it != m_callFrames_.rend();
+         ++it)
+    {
+        if (!it->parked)
+        {
+            RestoreCallFrame(*it);
+            it->parked = true;
+        }
+    }
+}
+
+void Executor::UnparkCallFrames()
+{
+    for (auto& frame : m_callFrames_)
+    {
+        if (frame.parked)
+            ApplyCallFrame(frame);
+    }
+}
+
 int Executor::Run(const std::shared_ptr<parser::ast::AstNode>& root)
 {
     m_suspendedHandle_ = {};
@@ -217,6 +339,9 @@ int Executor::Run(const std::shared_ptr<parser::ast::AstNode>& root)
     task.GetHandle().resume();
     if (m_suspendedHandle_)
     {
+        // Drop temporary call-frame state before returning to the
+        // prompt so FOO=bar f / $1 are not visible while stopped.
+        ParkCallFrames();
         std::shared_ptr<SuspendedCoro> suspended =
             std::make_shared<SuspendedCoro>(
                 SuspendedCoro{.rootTask = std::move(task),
@@ -305,12 +430,14 @@ Executor::ResumeSuspended(SuspendedCoro& rec, int leafStatus)
     // thawed SuspendAwaitable::await_resume reads it as the value of
     // co_await.
     m_resumedStatus_ = leafStatus;
+    UnparkCallFrames();
     rec.leafHandle.resume();
 
     if (m_suspendedHandle_)
     {
         // Ctrl-Z again: the compound re-froze on a new leaf. Re-point
         // the record at it and report the new process group up to fg.
+        ParkCallFrames();
         rec.leafHandle = m_suspendedHandle_;
         return {.completed = false,
                 .status = SIGNAL_EXIT_BASE + SIGTSTP,
@@ -341,12 +468,10 @@ Executor::BuildSpec(const std::vector<std::string>& argv,
     auto env = m_state_->GetEnv();
     for (const auto& assignment : command.Assignments())
         env[assignment.first] =
-            shell::expander::Expand(assignment.second,
-                                    m_state_,
-                                    m_cmdRunner_,
-                                    true,
-                                    m_procSubRunner_)
-                .front();
+            ExpandAssignmentValue(assignment.second,
+                                  m_state_,
+                                  m_cmdRunner_,
+                                  m_procSubRunner_);
     spec.env.reserve(env.size());
     for (const auto& entry : env)
         spec.env.push_back(entry.first + "=" + entry.second);
@@ -403,13 +528,10 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
         m_status_ = 0;
         for (const auto& assignment : command.Assignments())
         {
-            auto value =
-                shell::expander::Expand(assignment.second,
-                                        m_state_,
-                                        m_cmdRunner_,
-                                        true,
-                                        m_procSubRunner_)
-                    .front();
+            auto value = ExpandAssignmentValue(assignment.second,
+                                               m_state_,
+                                               m_cmdRunner_,
+                                               m_procSubRunner_);
             if (!m_state_->SetVar(assignment.first, value))
             {
                 io::fdops::WriteAll(STDERR_FILENO,
@@ -422,6 +544,11 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
     }
     if (auto* body = m_state_->GetFunctionBody(argv[0]))
     {
+        if (!PushCallFrame(
+                command.Assignments(),
+                std::vector<std::string>(argv.begin() + 1,
+                                         argv.end())))
+            co_return m_status_;
         try
         {
             co_await body->Accept(*this);
@@ -430,13 +557,38 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
         {
             m_status_ = ret.status;
         }
+        catch (...)
+        {
+            // `break`/`continue` propagate past a function body to the
+            // caller's loop (ControlFlow.FunctionBreakReachesCallersLoop),
+            // as does any ExecException from the body. Pop before the
+            // rethrow or the prefix assignments and the callee's
+            // positionals outlive the call.
+            PopCallFrame();
+            throw;
+        }
+        // Not reached on Ctrl-Z suspend (frame stays for Park/Unpark).
+        PopCallFrame();
         co_return m_status_;
     }
     else if (m_builtins_->IsBuiltin(argv[0]))
     {
-        auto ctx =
-            std::make_unique<builtins::BuiltinContext>(m_state_);
-        m_status_ = m_builtins_->Run(argv, ctx);
+        if (!PushCallFrame(command.Assignments(), std::nullopt))
+            co_return m_status_;
+        try
+        {
+            // return/break/continue throw — must pop before rethrow so
+            // an enclosing function's PopCallFrame hits the right frame.
+            auto ctx =
+                std::make_unique<builtins::BuiltinContext>(m_state_);
+            m_status_ = m_builtins_->Run(argv, ctx);
+        }
+        catch (...)
+        {
+            PopCallFrame();
+            throw;
+        }
+        PopCallFrame();
     }
     else
     {
@@ -457,7 +609,8 @@ coro::Task Executor::Visit(parser::ast::SimpleCommand& command)
                 proc.Exec(spec);
                 return EXIT_FAILURE;
             },
-            0);
+            0,
+            m_state_->IsJobControlEnabled());
 
         auto waitMode = m_state_->IsJobControlEnabled()
                             ? WaitMode::Foreground
@@ -521,7 +674,8 @@ std::vector<ProcessExecutor> Executor::LaunchStages(
                 RunToCompletion(stages[idx]);
                 return m_status_;
             },
-            pgid);
+            pgid,
+            m_state_->IsJobControlEnabled());
         pgid = runners[0].Pid();
     }
     return runners;
@@ -646,7 +800,8 @@ coro::Task Executor::Visit(parser::ast::Subshell& node)
         },
         0,
         m_state_->IsJobControlEnabled() ? WaitMode::Foreground
-                                        : WaitMode::Poll);
+                                        : WaitMode::Poll,
+        m_state_->IsJobControlEnabled());
     co_return m_status_;
 }
 
@@ -658,25 +813,32 @@ coro::Task Executor::Visit(parser::ast::List& list)
     {
         if (item.background)
         {
+            // With `set +m` the job gets no group of its own, so it
+            // stays in the shell's group and is not separately
+            // signalable — bash behaves the same way.
+            const bool jobControl = m_state_->IsJobControlEnabled();
             auto runner = ProcessExecutor();
             int errCode = runner.Run(
                 [&]
                 {
-                    setpgid(0,
-                            0); // own group -> kill(-pgid) reaches it
+                    if (jobControl)
+                        setpgid(0,
+                                0); // own group -> kill(-pgid) reaches it
                     m_state_->EnableJobControl(false);
                     RunToCompletion(item.node);
                     return m_status_;
                 },
                 0,
-                WaitMode::Poll);
+                WaitMode::Poll,
+                jobControl);
             if (errCode == PROCESS_RUNNING)
             {
                 pid_t pid = runner.Pid();
                 if (pid > 0)
                 {
-                    setpgid(pid, pid); // parent half of the
-                                       // race-guarded setpgid
+                    if (jobControl)
+                        setpgid(pid, pid); // parent half of the
+                                           // race-guarded setpgid
                     auto& jobTable = m_state_->GetJobs();
                     auto id =
                         jobTable->Add(pid, item.node->SourceText());

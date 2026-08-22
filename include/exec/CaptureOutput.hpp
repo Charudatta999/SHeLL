@@ -28,7 +28,8 @@ std::string CaptureOutput(
     const std::shared_ptr<parser::ast::AstNode>& root,
     std::unique_ptr<shell::ShellState>& state,
     std::unique_ptr<builtins::BuiltinDispatcher>& dispatcher,
-    const shell::expander::CommandRunner& cmdRunner);
+    const shell::expander::CommandRunner& cmdRunner,
+    const shell::expander::ProcSubRunner& procSubRunner = {});
 
 } // namespace exec
 #endif // EXEC_CAPTUREOUTPUT_HPP

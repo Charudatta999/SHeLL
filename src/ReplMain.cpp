@@ -2,6 +2,8 @@
 
 int main(int argc, char* argv[])
 {
-    return shell::Repl(shell::Repl::IsLoginInvocation(argc, argv))
-        .Run();
+    shell::Repl repl(shell::Repl::IsLoginInvocation(argc, argv));
+    if (argc > 0 && argv[0] != nullptr)
+        repl.SetArg0(argv[0]);
+    return repl.Run();
 }

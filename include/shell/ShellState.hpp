@@ -99,6 +99,10 @@ public:
     /// @param varName Name of the variable to export.
     void ExportVar(const std::string& varName) noexcept;
 
+    /// @brief Clear the export mark without unsetting the value.
+    /// @param varName Name of the variable to unexport.
+    void UnexportVar(const std::string& varName) noexcept;
+
     /// @brief Get the set of names marked for export.
     /// @return The exported-name set (names may have no value yet).
     [[nodiscard]]
@@ -127,7 +131,7 @@ public:
     [[nodiscard]]
     const std::set<std::string>& GetReadonlyVars() const;
 
-    // Positional parameters ($1.., set by `set -- args`)
+    // Positional parameters ($1.., set by `set -- args`) and $0
 
     /// @brief Replace all positional parameters atomically.
     /// @param params The new parameter list; $1 is params[0].
@@ -137,6 +141,14 @@ public:
     /// @return The parameter list; $1 is index 0.
     [[nodiscard]]
     const std::vector<std::string>& GetPositionalParams() const;
+
+    /// @brief Set the shell/script name expanded by `$0`.
+    /// @param name Typically `argv[0]`; defaults to `"shell"`.
+    void SetArg0(std::string name);
+
+    /// @brief Get the name expanded by `$0` / `${0}`.
+    [[nodiscard]]
+    const std::string& GetArg0() const;
 
     // Exit codes
 
@@ -283,6 +295,7 @@ private:
     std::set<std::string> m_exportedVars_;
     std::set<std::string> m_readonlyVars_;
     std::vector<std::string> m_positionalParams_;
+    std::string m_arg0_;
     int m_lastCommandExitCode_;
     bool m_runningFlag_;
     std::map<std::string, bool> m_shellOptions_;

@@ -62,20 +62,11 @@ Repl::Repl(bool loginShell)
         return exec::CaptureOutput(ast,
                                    m_state_,
                                    m_dispatcher_,
-                                   m_cmdRunner_);
+                                   m_cmdRunner_,
+                                   m_procSubRunner_);
     };
-    m_procSubRunner_ = [this](const std::string& text,
-                             bool writeMode) -> std::string
-    {
-        auto tokenizer = parser::Tokenizer(text);
-        const auto& tokens = tokenizer.Tokenize();
-        auto ast = parser::Parser(tokens).Parse();
-        return exec::StartProcessSub(ast,
-                                     m_state_,
-                                     m_dispatcher_,
-                                     m_cmdRunner_,
-                                     writeMode);
-    };
+    m_procSubRunner_ =
+        exec::MakeProcSubRunner(m_state_, m_dispatcher_, m_cmdRunner_);
     m_executor_ = std::make_unique<exec::Executor>(m_state_,
                                                    m_dispatcher_,
                                                    m_cmdRunner_,
@@ -85,7 +76,20 @@ Repl::Repl(bool loginShell)
     m_history_.Load();
 }
 
-Repl::~Repl() = default;
+Repl::~Repl()
+{
+    // SuspendedCoro frames hold CompoundScope refs into *m_executor_.
+    // m_executor_ is destroyed before m_state_ (declaration order), so
+    // tearing jobs down with ShellState would UAF those frames. Clear
+    // while the Executor is still alive.
+    if (m_state_)
+        m_state_->GetJobs()->Clear();
+}
+
+void Repl::SetArg0(std::string name)
+{
+    m_state_->SetArg0(std::move(name));
+}
 
 bool Repl::IsLoginInvocation(int argc, const char* const argv[])
 {

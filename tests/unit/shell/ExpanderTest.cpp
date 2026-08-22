@@ -549,6 +549,15 @@ TEST(Expander, PositionalParamExpands)
     EXPECT_EQ(expand1("${1}", s), "one");
 }
 
+TEST(Expander, DollarZeroIsArg0)
+{
+    auto s = makeState();
+    EXPECT_EQ(expand1("$0", s), "shell");
+    EXPECT_EQ(expand1("${0}", s), "shell");
+    s->SetArg0("mysh");
+    EXPECT_EQ(expand1("$0", s), "mysh");
+}
+
 TEST(Expander, UnsetPositionalIsEmpty)
 {
     auto s = makeState();

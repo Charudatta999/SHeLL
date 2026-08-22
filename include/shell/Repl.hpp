@@ -40,6 +40,9 @@ public:
     // Runs the loop until `exit` or EOF (Ctrl-D). Returns the shell exit status.
     int Run();
 
+    /// @brief Set the name expanded by `$0` (typically `argv[0]`).
+    void SetArg0(std::string name);
+
     /// @brief Decide whether an invocation is a login shell: argv[0]
     ///        beginning with '-' (how login(1)/sshd spell it), or an
     ///        explicit --login / -l flag.

@@ -177,6 +177,16 @@ TEST(JobTable, RemoveByIdErasesOnlyThatJob)
     EXPECT_THROW((void)table.FindById(first), shell::ShellException);
 }
 
+TEST(JobTable, ClearDropsAllJobs)
+{
+    shell::JobTable table;
+    table.Add(1111, "a");
+    table.Add(2222, "b");
+    table.Clear();
+    EXPECT_TRUE(table.List().empty());
+    EXPECT_FALSE(table.CurrentId().has_value());
+}
+
 TEST(JobTable, RemoveByIdMissingIsNoop)
 {
     shell::JobTable table;
