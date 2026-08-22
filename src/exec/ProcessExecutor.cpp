@@ -37,7 +37,9 @@ int ProcessExecutor::ExitCode() const
     return m_exitCode_;
 }
 
-void ProcessExecutor::Fork(const std::function<int()>& childFn, pid_t pgid)
+void ProcessExecutor::Fork(const std::function<int()>& childFn,
+                           pid_t pgid,
+                           bool setPgid)
 {
     m_pid_ = fork();
     if (m_pid_ < 0)
@@ -47,16 +49,24 @@ void ProcessExecutor::Fork(const std::function<int()>& childFn, pid_t pgid)
     }
     if (m_pid_ == 0)
     {
-        setpgid(0, pgid);
+        // Both sides call setpgid to close the race either way round;
+        // with job control off we skip it entirely and inherit the
+        // shell's group.
+        if (setPgid)
+            setpgid(0, pgid);
         _exit(childFn());
     }
-    setpgid(m_pid_, pgid == 0 ? m_pid_ : pgid);
+    if (setPgid)
+        setpgid(m_pid_, pgid == 0 ? m_pid_ : pgid);
     m_running_ = true;
 }
 
-int ProcessExecutor::Run(const std::function<int()>& childFn, pid_t pgid, WaitMode mode)
+int ProcessExecutor::Run(const std::function<int()>& childFn,
+                         pid_t pgid,
+                         WaitMode mode,
+                         bool setPgid)
 {
-    Fork(childFn, pgid);
+    Fork(childFn, pgid, setPgid);
     if (m_pid_ < 0)
     {
         m_exitCode_ = -1;
