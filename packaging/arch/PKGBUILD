@@ -1,0 +1,27 @@
+# Maintainer: Charudatta Jadhav <cjawsome999@gmail.com>
+#
+# Builds from shell-repl-$pkgver.tar.gz next to this file (CI creates it with
+# packaging/make-source-tarball.sh; run that first for a local `makepkg -si`).
+pkgname=shell-repl
+pkgver=${SHELL_PKGVER:-0.1.0}
+pkgrel=1
+pkgdesc='SHeLL - a bash-like shell (REPL build)'
+arch=('x86_64')
+url='https://github.com/Charudatta999/SHeLL'
+license=('MIT')
+depends=('gcc-libs' 'glibc')
+makedepends=('cmake' 'ninja' 'clang')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')  # tarball is generated in the same pipeline run
+
+build() {
+  CC=clang CXX=clang++ cmake -S "$pkgname-$pkgver" -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DBUILD_GUI=OFF -DBUILD_MCP=OFF -DBUILD_TESTING=OFF -DENABLE_SANITIZERS=OFF
+  cmake --build build --target shellrepl
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}
