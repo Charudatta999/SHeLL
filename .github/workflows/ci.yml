@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
     branches: [master]
+
+permissions:
+  contents: read
 
 env:
   CC: clang
@@ -60,3 +64,168 @@ jobs:
 
       - name: Run tests
         run: ctest --test-dir build --output-on-failure
+
+  version:
+    name: Compute package version
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      arch: ${{ steps.ver.outputs.arch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # v0.1.0-beta.1 -> 0.1.0~beta.1 (sorts before 0.1.0 in deb and rpm)
+            v="${GITHUB_REF_NAME#v}"; v="${v//-/\~}"
+          else
+            base=$(grep -oP '^\s+VERSION \K[0-9.]+' CMakeLists.txt | head -1)
+            v="${base}.r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          # makepkg forbids '-' and '~' in pkgver
+          echo "arch=${v//\~/_}" >> "$GITHUB_OUTPUT"
+          echo "Version: $v"
+
+  package-arch:
+    name: Package (Arch .pkg.tar.zst)
+    needs: version
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - run: pacman -Syu --noconfirm --needed base-devel git cmake ninja clang namcap
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build source tarball and package
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          packaging/make-source-tarball.sh "${{ needs.version.outputs.arch }}" packaging/arch
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          su builder -c "cd '$GITHUB_WORKSPACE/packaging/arch' && \
+            SHELL_PKGVER='${{ needs.version.outputs.arch }}' PKGDEST='$GITHUB_WORKSPACE/dist' \
+            makepkg -f --noconfirm --nodeps"
+          ls -l dist
+      - name: Lint and install-test
+        run: |
+          namcap dist/*.pkg.tar.zst || true
+          pacman -U --noconfirm dist/shell-repl-[0-9]*.pkg.tar.zst
+          test -x /usr/bin/shellrepl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-arch
+          path: dist/*.pkg.tar.zst
+          if-no-files-found: error
+
+  package-generic:
+    name: Package (.deb, .rpm, .tar.gz)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build rpm dpkg-dev
+      - name: Configure and build
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DBUILD_GUI=OFF -DBUILD_MCP=OFF -DBUILD_TESTING=OFF -DENABLE_SANITIZERS=OFF \
+            -DSHELL_PACKAGE_VERSION="${{ needs.version.outputs.version }}"
+          cmake --build build --target shellrepl
+      - name: Create packages
+        run: |
+          cd build && cpack
+          mkdir -p ../dist
+          mv shell-repl-*.deb shell-repl-*.rpm shell-repl-*.tar.gz ../dist/
+          cd .. && git archive --format=tar.gz \
+            --prefix="shell-repl-${{ needs.version.outputs.version }}/" \
+            -o "dist/shell-repl-${{ needs.version.outputs.version }}-src.tar.gz" HEAD
+          ls -l dist
+      - name: Install-test deb and inspect rpm
+        run: |
+          sudo dpkg -i dist/*.deb
+          test -x /usr/bin/shellrepl
+          rpm -qlp dist/*.rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-generic
+          path: dist/*
+          if-no-files-found: error
+
+  sign:
+    name: Sign artifacts (GPG)
+    needs: [package-arch, package-generic]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+          path: dist
+      - name: Import key and sign
+        id: sign
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "::error::GPG_PRIVATE_KEY secret is required to publish a release"; exit 1
+            fi
+            echo "::warning::GPG_PRIVATE_KEY not set (fork PR or unconfigured repo) — artifacts left UNSIGNED"
+            echo "signed=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          export GNUPGHOME="$(mktemp -d)"; chmod 700 "$GNUPGHOME"
+          echo "allow-loopback-pinentry" > "$GNUPGHOME/gpg-agent.conf"
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          fpr=$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
+          cd dist
+          # Detached signature per artifact (.sig, binary — what pacman expects; gpg --verify works for all)
+          for f in *.pkg.tar.zst *.deb *.rpm *.tar.gz; do
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+                --local-user "$fpr" --detach-sign --output "$f.sig" "$f"
+          done
+          sha256sum -- *.pkg.tar.zst *.deb *.rpm *.tar.gz > SHA256SUMS
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+              --local-user "$fpr" --detach-sign --armor --output SHA256SUMS.asc SHA256SUMS
+          gpg --batch --armor --export "$fpr" > shell-signing-key.asc
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+      - name: Verify signatures
+        if: steps.sign.outputs.signed == 'true'
+        run: |
+          cd dist
+          for f in *.pkg.tar.zst *.deb *.rpm *.tar.gz; do gpg --batch --verify "$f.sig" "$f"; done
+          gpg --batch --verify SHA256SUMS.asc SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-release
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-release
+          path: dist
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""; [[ "$GITHUB_REF_NAME" == *-* ]] && pre="--prerelease"
+          gh release create "$GITHUB_REF_NAME" dist/* $pre \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

@@ -387,6 +387,9 @@ if(BUILD_BENCHMARKS)
     # add_subdirectory(benchmarks)
 endif()
 
+# ─── Packaging (install + CPack) ─────────────────────────
+include(Packaging)
+
 # ─── Build Summary ────────────────────────────────────────
 message(STATUS "")
 message(STATUS "══════════════════════════════════════")
