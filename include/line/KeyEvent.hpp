@@ -4,6 +4,7 @@
 namespace line
 {
 
+/// @brief A decoded key press, independent of its terminal byte sequence.
 enum class Key
 {
     Char,
@@ -23,6 +24,7 @@ enum class Key
     Delete,
     Enter,
     Tab,
+    ShiftTab, ///< Back-tab (CSI Z); reverses completion cycling.
 
     // Ctrl combos
     CtrlA,
@@ -44,9 +46,10 @@ enum class Key
     Unknown,
 };
 
+/// @brief A key press plus, for @ref Key::Char, the literal character.
 struct KeyEvent
 {
-    Key key;
+    Key key = Key::Unknown;
     char ch = '\0';
 };
 
