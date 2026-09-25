@@ -200,6 +200,9 @@ jobs:
       - name: Verify signatures
         if: steps.sign.outputs.signed == 'true'
         run: |
+          # Fresh keyring holding only the published public key, like a user would have.
+          export GNUPGHOME="$(mktemp -d)"; chmod 700 "$GNUPGHOME"
+          gpg --batch --import dist/shell-signing-key.asc
           cd dist
           for f in *.pkg.tar.zst *.deb *.rpm *.tar.gz; do gpg --batch --verify "$f.sig" "$f"; done
           gpg --batch --verify SHA256SUMS.asc SHA256SUMS
