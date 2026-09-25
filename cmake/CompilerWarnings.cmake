@@ -5,6 +5,8 @@
 # Usage: target_set_warnings(my_target)
 # =========================================================
 
+option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
+
 function(target_set_warnings target)
 
     set(GCC_CLANG_WARNINGS
@@ -29,10 +31,13 @@ function(target_set_warnings target)
         -Wunused
         -Woverloaded-virtual
         -Wnull-dereference
-
-        # --- Treat warnings as errors in CI (opt-in) ---
-        -Werror
     )
+
+    # Off for distro package builds: makepkg/rpm inject their own hardening flags
+    # (e.g. _FORTIFY_SOURCE) that surface extra warnings not present in dev/CI builds.
+    if(WARNINGS_AS_ERRORS)
+        list(APPEND GCC_CLANG_WARNINGS -Werror)
+    endif()
 
     set(GCC_ONLY_WARNINGS
         -Wmisleading-indentation

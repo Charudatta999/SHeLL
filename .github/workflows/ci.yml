@@ -136,14 +136,14 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
-            -DBUILD_GUI=OFF -DBUILD_MCP=OFF -DBUILD_TESTING=OFF -DENABLE_SANITIZERS=OFF \
-            -DSHELL_PACKAGE_VERSION="${{ needs.version.outputs.version }}"
+            -DWARNINGS_AS_ERRORS=OFF -DBUILD_GUI=OFF -DBUILD_MCP=OFF -DBUILD_TESTING=OFF \
+            -DENABLE_SANITIZERS=OFF -DSHELL_PACKAGE_VERSION="${{ needs.version.outputs.version }}"
           cmake --build build --target shellrepl
       - name: Create packages
         run: |
           cd build && cpack
           mkdir -p ../dist
-          mv shell-repl-*.deb shell-repl-*.rpm shell-repl-*.tar.gz ../dist/
+          mv shell-repl*.deb shell-repl*.rpm shell-repl-*.tar.gz ../dist/
           cd .. && git archive --format=tar.gz \
             --prefix="shell-repl-${{ needs.version.outputs.version }}/" \
             -o "dist/shell-repl-${{ needs.version.outputs.version }}-src.tar.gz" HEAD
