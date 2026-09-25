@@ -5,6 +5,7 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <unistd.h>
+#include "io/FdOps.hpp"
 
 namespace line
 {
@@ -224,7 +225,7 @@ void Terminal::MoveCursorLeft(int count)
     if (count <= 0)
         return;
     const std::string seq = std::format("\x1b[{}D", count);
-    write(STDOUT_FILENO, seq.data(), seq.size());
+    io::fdops::WriteAll(STDOUT_FILENO, seq);
 }
 
 void Terminal::MoveCursorRight(int count)
@@ -232,18 +233,18 @@ void Terminal::MoveCursorRight(int count)
     if (count <= 0)
         return;
     const std::string seq = std::format("\x1b[{}C", count);
-    write(STDOUT_FILENO, seq.data(), seq.size());
+    io::fdops::WriteAll(STDOUT_FILENO, seq);
 }
 
 void Terminal::MoveCursorToCol(int col)
 {
     const std::string seq = std::format("\x1b[{}G", col + 1);
-    write(STDOUT_FILENO, seq.data(), seq.size());
+    io::fdops::WriteAll(STDOUT_FILENO, seq);
 }
 
 void Terminal::ClearToEndOfLine()
 {
-    write(STDOUT_FILENO, "\x1b[K", 3);
+    io::fdops::WriteAll(STDOUT_FILENO, "\x1b[K");
 }
 
 void Terminal::MoveCursorUp(int count)
@@ -251,7 +252,7 @@ void Terminal::MoveCursorUp(int count)
     if (count <= 0)
         return;
     const std::string seq = std::format("\x1b[{}A", count);
-    write(STDOUT_FILENO, seq.data(), seq.size());
+    io::fdops::WriteAll(STDOUT_FILENO, seq);
 }
 
 void Terminal::MoveCursorDown(int count)
@@ -259,18 +260,18 @@ void Terminal::MoveCursorDown(int count)
     if (count <= 0)
         return;
     const std::string seq = std::format("\x1b[{}B", count);
-    write(STDOUT_FILENO, seq.data(), seq.size());
+    io::fdops::WriteAll(STDOUT_FILENO, seq);
 }
 
 void Terminal::ClearBelow()
 {
     // Erase from the cursor to the end of the screen (wipes the menu).
-    write(STDOUT_FILENO, "\x1b[0J", 4);
+    io::fdops::WriteAll(STDOUT_FILENO, "\x1b[0J");
 }
 
 void Terminal::ClearScreen()
 {
-    write(STDOUT_FILENO, "\x1b[2J\x1b[H", 7);
+    io::fdops::WriteAll(STDOUT_FILENO, "\x1b[2J\x1b[H");
 }
 
 int Terminal::GetWidth()

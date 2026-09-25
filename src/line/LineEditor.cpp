@@ -5,6 +5,7 @@
 
 #include <unistd.h>
 #include <vector>
+#include "io/FdOps.hpp"
 
 namespace line
 {
@@ -48,7 +49,7 @@ LineEditor::ReadLine(const std::string& prompt)
     m_prompt_ = prompt;
     m_history_.Reset();
 
-    write(STDOUT_FILENO, m_prompt_.c_str(), m_prompt_.size());
+    io::fdops::WriteAll(STDOUT_FILENO, m_prompt_);
 
     while (true)
     {
@@ -66,7 +67,7 @@ LineEditor::ReadLine(const std::string& prompt)
         switch (event.key)
         {
             case Key::Enter:
-                write(STDOUT_FILENO, "\r\n", 2);
+                io::fdops::WriteAll(STDOUT_FILENO, "\r\n");
                 return m_buffer_;
 
             case Key::CtrlD:
@@ -282,8 +283,8 @@ void LineEditor::RestoreOriginalWord()
 void LineEditor::RenderPager()
 {
     m_terminal_.MoveCursorToCol(0);
-    write(STDOUT_FILENO, m_prompt_.data(), m_prompt_.size());
-    write(STDOUT_FILENO, m_buffer_.data(), m_buffer_.size());
+    io::fdops::WriteAll(STDOUT_FILENO, m_prompt_);
+    io::fdops::WriteAll(STDOUT_FILENO, m_buffer_);
     m_terminal_.ClearToEndOfLine();
     m_terminal_.ClearBelow();
     m_pager_.Render(m_terminal_);
@@ -294,8 +295,8 @@ void LineEditor::ClosePager()
 {
     m_pagerActive_ = false;
     m_terminal_.MoveCursorToCol(0);
-    write(STDOUT_FILENO, m_prompt_.data(), m_prompt_.size());
-    write(STDOUT_FILENO, m_buffer_.data(), m_buffer_.size());
+    io::fdops::WriteAll(STDOUT_FILENO, m_prompt_);
+    io::fdops::WriteAll(STDOUT_FILENO, m_buffer_);
     m_terminal_.ClearToEndOfLine();
     m_terminal_.ClearBelow();
     m_terminal_.MoveCursorToCol(static_cast<int>(m_prompt_.size() + m_cursor_));
@@ -437,25 +438,25 @@ void LineEditor::HistoryDown()
 void LineEditor::ClearScreen()
 {
     m_terminal_.ClearScreen();
-    write(STDOUT_FILENO, m_prompt_.c_str(), m_prompt_.size());
-    write(STDOUT_FILENO, m_buffer_.c_str(), m_buffer_.size());
+    io::fdops::WriteAll(STDOUT_FILENO, m_prompt_);
+    io::fdops::WriteAll(STDOUT_FILENO, m_buffer_);
     m_terminal_.MoveCursorToCol(
         static_cast<int>(m_prompt_.size() + m_cursor_));
 }
 
 void LineEditor::Interrupt()
 {
-    write(STDOUT_FILENO, "^C\r\n", 4);
+    io::fdops::WriteAll(STDOUT_FILENO, "^C\r\n");
     m_buffer_.clear();
     m_cursor_ = 0;
-    write(STDOUT_FILENO, m_prompt_.c_str(), m_prompt_.size());
+    io::fdops::WriteAll(STDOUT_FILENO, m_prompt_);
 }
 
 void LineEditor::Refresh()
 {
-    write(STDOUT_FILENO, "\r", 1);
-    write(STDOUT_FILENO, m_prompt_.c_str(), m_prompt_.size());
-    write(STDOUT_FILENO, m_buffer_.c_str(), m_buffer_.size());
+    io::fdops::WriteAll(STDOUT_FILENO, "\r");
+    io::fdops::WriteAll(STDOUT_FILENO, m_prompt_);
+    io::fdops::WriteAll(STDOUT_FILENO, m_buffer_);
     m_terminal_.ClearToEndOfLine();
     m_terminal_.MoveCursorToCol(
         static_cast<int>(m_prompt_.size() + m_cursor_));

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <unistd.h>
+#include "io/FdOps.hpp"
 
 namespace
 {
@@ -247,10 +248,10 @@ int Echo(const std::vector<std::string>& argv,
             break;
         }
     }
-    write(ctx->outFd, outString.data(), outString.size());
+    io::fdops::WriteAll(ctx->outFd, outString);
     if (opts.newline && !stop)
     {
-        write(ctx->outFd, "\n", 1);
+        io::fdops::WriteAll(ctx->outFd, "\n");
     }
     return 0;
 }

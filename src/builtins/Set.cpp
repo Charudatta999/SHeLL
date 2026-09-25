@@ -3,6 +3,7 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include "io/FdOps.hpp"
 
 namespace builtins
 {
@@ -33,7 +34,7 @@ void PrintAllVars(BuiltinContext& ctx)
     for (const auto& entry : vars)
     {
         std::string line = entry.first + "=" + entry.second + "\n";
-        write(ctx.outFd, line.c_str(), line.size());
+        io::fdops::WriteAll(ctx.outFd, line);
     }
 }
 } // namespace
@@ -77,7 +78,7 @@ int Set(const std::vector<std::string>& argv,
             {
                 std::string err =
                     "set: " + arg + ": option name required\n";
-                write(ctx->errFd, err.c_str(), err.size());
+                io::fdops::WriteAll(ctx->errFd, err);
                 return 2;
             }
             ++i;
@@ -107,7 +108,7 @@ int Set(const std::vector<std::string>& argv,
                 {
                     std::string err = std::string("set: ") + arg[0] +
                                       arg[j] + ": invalid option\n";
-                    write(ctx->errFd, err.c_str(), err.size());
+                    io::fdops::WriteAll(ctx->errFd, err);
                     return 2;
                 }
                 if (arg[0] == '-')

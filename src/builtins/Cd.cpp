@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <unistd.h>
+#include "io/FdOps.hpp"
 
 namespace builtins
 {
@@ -17,7 +18,7 @@ int Cd(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ct
         if (!home.has_value())
         {
             errStr = "HOME path varibale not set ";
-            write(ctx->errFd, errStr.c_str(), errStr.size());
+            io::fdops::WriteAll(ctx->errFd, errStr);
             return 1;
         }
         target = home.value();
@@ -32,7 +33,7 @@ int Cd(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& ct
     if (chdir(target.c_str()) != 0)
     {
         errStr = "cd: " + target + "\n";
-        write(ctx->errFd, errStr.c_str(), errStr.size());
+        io::fdops::WriteAll(ctx->errFd, errStr);
         return 1;
     }
 
