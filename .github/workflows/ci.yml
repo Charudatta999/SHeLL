@@ -136,8 +136,8 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
-            -DBUILD_GUI=OFF -DBUILD_MCP=OFF -DBUILD_TESTING=OFF -DENABLE_SANITIZERS=OFF \
-            -DSHELL_PACKAGE_VERSION="${{ needs.version.outputs.version }}"
+            -DWARNINGS_AS_ERRORS=OFF -DBUILD_GUI=OFF -DBUILD_MCP=OFF -DBUILD_TESTING=OFF \
+            -DENABLE_SANITIZERS=OFF -DSHELL_PACKAGE_VERSION="${{ needs.version.outputs.version }}"
           cmake --build build --target shellrepl
       - name: Create packages
         run: |
