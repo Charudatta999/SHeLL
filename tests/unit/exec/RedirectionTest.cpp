@@ -17,6 +17,7 @@
 
 #include "exec/Redirection.hpp"
 #include "parser/ast/Redirect.hpp"
+#include "io/FdOps.hpp"
 
 namespace
 {
@@ -48,7 +49,7 @@ int childApplyAndWrite(const Redirect& redirect, int fd,
     {
         if (!exec::ApplyRedirect(redirect))
             _exit(2);
-        ::write(fd, bytes.data(), bytes.size());
+        io::fdops::WriteAll(fd, bytes);
         _exit(0);
     }
     int status = 0;

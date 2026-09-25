@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unistd.h>
+#include "io/FdOps.hpp"
 
 namespace builtins
 {
@@ -22,7 +23,7 @@ int Unset(const std::vector<std::string>& argv,
         {
             std::string err =
                 "unset: " + argv[i] + ": invalid option\n";
-            write(ctx->errFd, err.c_str(), err.size());
+            io::fdops::WriteAll(ctx->errFd, err);
             return 2;
         }
     }
@@ -38,7 +39,7 @@ int Unset(const std::vector<std::string>& argv,
                 std::string err =
                     "unset: " + name +
                     ": cannot unset: readonly variable\n";
-                write(ctx->errFd, err.c_str(), err.size());
+                io::fdops::WriteAll(ctx->errFd, err);
                 status = 1;
                 continue;
             }

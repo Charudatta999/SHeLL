@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unistd.h>
+#include "io/FdOps.hpp"
 
 namespace builtins
 {
@@ -15,7 +16,7 @@ void PrintExported(BuiltinContext& ctx)
         if (auto value = ctx.m_state_->GetVar(name))
             line += "=\"" + *value + "\"";
         line += "\n";
-        write(ctx.outFd, line.c_str(), line.size());
+        io::fdops::WriteAll(ctx.outFd, line);
     }
 }
 } // namespace
@@ -39,7 +40,7 @@ int Export(const std::vector<std::string>& argv,
         {
             std::string err =
                 "export: `" + arg + "': not a valid identifier\n";
-            write(ctx->errFd, err.c_str(), err.size());
+            io::fdops::WriteAll(ctx->errFd, err);
             status = 1;
             continue;
         }
@@ -48,7 +49,7 @@ int Export(const std::vector<std::string>& argv,
         {
             std::string err =
                 "export: " + name + ": readonly variable\n";
-            write(ctx->errFd, err.c_str(), err.size());
+            io::fdops::WriteAll(ctx->errFd, err);
             status = 1;
             continue;
         }

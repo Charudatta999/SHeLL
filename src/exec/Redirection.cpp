@@ -1,6 +1,7 @@
 #include "exec/Redirection.hpp"
 
 #include "parser/ast/Redirect.hpp"
+#include "io/FdOps.hpp"
 
 #include <cstdlib>
 #include <fcntl.h>
@@ -97,7 +98,7 @@ bool ApplyRedirect(const parser::ast::Redirect& redirect)
             int p[2];
             if (pipe(p) < 0)
                 return false;
-            write(p[1], redirect.target.data(), redirect.target.size());
+            io::fdops::WriteAll(p[1], redirect.target);
             close(p[1]);
             dup2(p[0], 0);
             close(p[0]);

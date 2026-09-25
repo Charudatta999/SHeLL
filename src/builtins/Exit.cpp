@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unistd.h>
+#include "io/FdOps.hpp"
 
 namespace builtins
 {
@@ -19,7 +20,7 @@ int Exit(const std::vector<std::string>& argv, std::unique_ptr<BuiltinContext>& 
         catch (const std::exception&)
         {
             const std::string err = "exit: " + argv[1] + ": numeric argument required\n";
-            write(ctx->errFd, err.c_str(), err.size());
+            io::fdops::WriteAll(ctx->errFd, err);
             code = 2;
         }
     }

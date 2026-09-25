@@ -143,7 +143,7 @@ jobs:
         run: |
           cd build && cpack
           mkdir -p ../dist
-          mv shell-repl-*.deb shell-repl-*.rpm shell-repl-*.tar.gz ../dist/
+          mv shell-repl*.deb shell-repl*.rpm shell-repl-*.tar.gz ../dist/
           cd .. && git archive --format=tar.gz \
             --prefix="shell-repl-${{ needs.version.outputs.version }}/" \
             -o "dist/shell-repl-${{ needs.version.outputs.version }}-src.tar.gz" HEAD

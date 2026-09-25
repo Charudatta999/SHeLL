@@ -846,7 +846,7 @@ coro::Task Executor::Visit(parser::ast::List& list)
                     std::string err = "[" + std::to_string(id) +
                                       "] " + std::to_string(pid) +
                                       "\n";
-                    write(STDOUT_FILENO, err.c_str(), err.size());
+                    io::fdops::WriteAll(STDOUT_FILENO, err);
                 }
             }
         }

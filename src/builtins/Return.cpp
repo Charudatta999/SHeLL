@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
+#include "io/FdOps.hpp"
 
 namespace builtins
 {
@@ -25,7 +26,7 @@ int Return(const std::vector<std::string>& argv,
         {
             const std::string err = "return: " + argv[1] +
                                     ": numeric argument required\n";
-            write(ctx->errFd, err.c_str(), err.size());
+            io::fdops::WriteAll(ctx->errFd, err);
             return 255;
         }
     }

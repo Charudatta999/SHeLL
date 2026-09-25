@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 #include <unistd.h>
+#include "io/FdOps.hpp"
 
 namespace line
 {
@@ -16,7 +17,7 @@ constexpr std::size_t kColGap = 2; // space between columns
 
 void WriteStr(const std::string& text)
 {
-    write(STDOUT_FILENO, text.data(), text.size());
+    io::fdops::WriteAll(STDOUT_FILENO, text);
 }
 
 /// @brief How a description is shown in the grid: fish wraps it in parens.
